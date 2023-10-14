@@ -36,6 +36,12 @@
 #define INFORMATION_FRAME1 0x0B
 
 
+#define C_I(Ns) (Ns << 6);
+
+#define ESC 0x7d
+#define FLAG_R 0x5e
+#define ESC_R 0x5d
+
 enum rec_status {Start, flag_rcv, a_rcv, c_rcv, bcc_ok, a_tx, c_tx, STOP};
 
 int fd;
@@ -45,6 +51,10 @@ enum Status {RECEIVER, TRANSMITER};
 
 int alarmEnabled = FALSE;
 int alarmCount = 0;
+
+
+int Ns = 0;
+int Nr = 1;
 
 
 
@@ -71,9 +81,66 @@ int sendcontrol(unsigned char frame2, unsigned char frame3){
 }
 
 
+
+int setup(const char* serialPortName){
+    fd = open(serialPortName, O_RDWR | O_NOCTTY);
+
+    if (fd < 0)
+    {
+        perror(serialPortName);
+        exit(-1);
+    }
+
+
+    // Save current port settings
+    if (tcgetattr(fd, &oldtio) == -1)
+    {
+        perror("tcgetattr");
+        exit(-1);
+    }
+
+    // Clear struct for new port settings
+    memset(&newtio, 0, sizeof(newtio));
+
+    newtio.c_cflag = BAUDRATE | CS8 | CLOCAL | CREAD;
+    newtio.c_iflag = IGNPAR;
+    newtio.c_oflag = 0;
+
+    // Set input mode (non-canonical, no echo,...)
+    newtio.c_lflag = 0;
+    newtio.c_cc[VTIME] = 5; // Inter-character timer unused
+    newtio.c_cc[VMIN] = 0;  // Blocking read until 5 chars received
+
+    // VTIME e VMIN should be changed in order to protect with a
+    // timeout the reception of the following character(sCLOC)
+
+    // Now clean the line and activate the settings for the port
+    // tcflush() discards data written to the object referred to
+    // by fd but not transmitted, or data received but not read,
+    // depending on the value of queue_selector:
+    //   TCIFLUSH - flushes data received but not read.
+    tcflush(fd, TCIOFLUSH);
+
+    // Set new port settings
+    if (tcsetattr(fd, TCSANOW, &newtio) == -1)
+    {
+        perror("tcsetattr");
+        exit(-1);
+    }
+
+    printf("New termios structure set\n");
+    return 0;
+}
+
+
 int llopen(const char* porta, enum Status status)  {
 
     printf("\n\n LLOPEN status %i \n\n", status);
+
+
+    if (setup(porta) < 0) return -1;
+    
+
 
     enum rec_status state_mach_rec = Start; 
 
@@ -177,6 +244,7 @@ int llopen(const char* porta, enum Status status)  {
             }
             alarm(0);
         }
+        alarmCount = 0;
         
     break;
     default:
@@ -184,61 +252,144 @@ int llopen(const char* porta, enum Status status)  {
     }
 
 
+    return fd;
+}
+
+
+//return –number of writer characters –negative value in case of error
+int llwrite(int fd, char * buffer, int length) {
+    int frame_len = length + 6;
+
+    unsigned char *frame = (unsigned char *) malloc(frame_len * sizeof(char));
+
+    frame[0] = FLAG;
+    frame[1] = A_TRANSMITER;
+    frame[2] = C_I(Ns);
+    frame[3] = frame[1] ^ frame[2];
+
+    unsigned char bcc2 = buffer[0];
+    for (int i = 1; i < length; i++){
+        bcc2 ^= buffer[i];
+    }
+
+    //memccpy(frame+4,buffer,length);
+
+    int pointer_f = 4;
+
+    for (int i = 0; i < length; i++){
+
+        if (buffer[i] == FLAG){
+            frame_len++;
+            frame = realloc(frame, frame_len);
+            frame[pointer_f++] = ESC;
+            frame[pointer_f++] = FLAG_R;
+            continue;
+        }
+
+        else if (buffer[i] == ESC){
+            frame_len++;
+            frame = realloc(frame, frame_len);
+            frame[pointer_f++] = ESC;
+            frame[pointer_f++] = FLAG_R;
+            continue;
+        }
+
+        else {
+
+            frame[pointer_f++] = buffer[i];
+        }
+        
+
+    }
+
+    frame[pointer_f++] = bcc2;
+    frame[pointer_f] = FLAG;
+
+    enum rec_status state_mach_tx = Start; 
+    bool accepted = 0;
+    bool rejected = 0;
+    char byte = 0;
+    char byte_c = 0;
+    
+    while (alarmCount < 3 && state_mach_tx != STOP)
+        {
+            
+            write(fd,frame,frame_len);
+            //sendcontrol(A_TRANSMITER, SET);
+            alarm(3); // Set alarm to be triggered in 3s
+            alarmEnabled = TRUE;
+
+            //so volta aqui passado 3 segundos
+
+            while(alarmEnabled == TRUE && state_mach_tx != STOP){
+                if (read(fd,&byte,1) > 0){
+                    
+                    switch (state_mach_tx)
+                {
+                case Start:
+                    if (byte == FLAG){ state_mach_tx = flag_rcv; }
+                    //else {state_mach_tx = Start;}
+                    break;
+                case flag_rcv:
+                    if(byte == A_RECEIVER){ state_mach_tx = a_tx; }
+                    else if (byte == FLAG) { state_mach_tx = flag_rcv; }
+                    else {state_mach_tx = Start;}
+                    break;
+                case a_tx:                   //new
+                    byte_c = byte;
+                    if(byte == RR0 || byte == RR1){ state_mach_tx = c_tx; 
+                        accepted = 1;
+                        Ns = (Ns + 1) % 2;
+                    }
+                    else if (byte == REJ0 || byte == REJ1){ state_mach_tx = c_tx; 
+                        rejected = 1;
+                    }
+                    else if (byte == FLAG){ state_mach_tx = flag_rcv; }
+                    else {state_mach_tx = Start;}
+                    break;
+                case c_tx:
+                    if(byte == (A_RECEIVER ^ byte_c)){ state_mach_tx = bcc_ok; }
+                    else if (byte == FLAG){ state_mach_tx = flag_rcv; }
+                    else {state_mach_tx = Start;}
+                    break;
+                case bcc_ok:
+                    if(byte == FLAG){ state_mach_tx = STOP; }
+                    else {state_mach_tx = Start;}
+                    break;
+                default:
+                    break;
+                }
+
+                }
+    
+            }
+
+        alarm(0);
+        if (rejected) {printf("rejected"); rejected = 0; state_mach_tx = Start; continue;}
+        if (accepted) {printf("accepted"); break;}
+
+        }
+        
+        alarmCount = 0;
+        free(frame);
+
+        if (accepted > 0) return frame_len;
+        else {
+            llclose(fd);   
+            return -1;
+        }
 
 }
 
 
 
-
-int setup(const char* serialPortName){
-    fd = open(serialPortName, O_RDWR | O_NOCTTY);
-
-    if (fd < 0)
-    {
-        perror(serialPortName);
-        exit(-1);
-    }
+//return –array length (number of characters read) –negative value in case of error
+int llread(int fd, char * buffer){}
 
 
-    // Save current port settings
-    if (tcgetattr(fd, &oldtio) == -1)
-    {
-        perror("tcgetattr");
-        exit(-1);
-    }
 
-    // Clear struct for new port settings
-    memset(&newtio, 0, sizeof(newtio));
 
-    newtio.c_cflag = BAUDRATE | CS8 | CLOCAL | CREAD;
-    newtio.c_iflag = IGNPAR;
-    newtio.c_oflag = 0;
 
-    // Set input mode (non-canonical, no echo,...)
-    newtio.c_lflag = 0;
-    newtio.c_cc[VTIME] = 5; // Inter-character timer unused
-    newtio.c_cc[VMIN] = 0;  // Blocking read until 5 chars received
-
-    // VTIME e VMIN should be changed in order to protect with a
-    // timeout the reception of the following character(sCLOC)
-
-    // Now clean the line and activate the settings for the port
-    // tcflush() discards data written to the object referred to
-    // by fd but not transmitted, or data received but not read,
-    // depending on the value of queue_selector:
-    //   TCIFLUSH - flushes data received but not read.
-    tcflush(fd, TCIOFLUSH);
-
-    // Set new port settings
-    if (tcsetattr(fd, TCSANOW, &newtio) == -1)
-    {
-        perror("tcsetattr");
-        exit(-1);
-    }
-
-    printf("New termios structure set\n");
-    return 0;
-}
 
 
 
@@ -265,13 +416,17 @@ int main(int argc, char *argv[]){
         printf("\n\nMAIN STRCMP RECEIVER\n\n");
         teste = RECEIVER;
     }
-    else if (strcmp(status_,"transmiter") == 0){
+    else if (strcmp(status_,"emissor") == 0){
         printf("\n\nMAIN STRCMP TRANSMITTER\n\n");
         teste = TRANSMITER;
    }
 
-    setup(serialPortName);
-    llopen(serialPortName, teste);
+    //setup(serialPortName);
+
+
+
+    printf("%i",llopen(serialPortName, teste));
+
 
 
 
