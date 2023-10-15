@@ -36,13 +36,22 @@
 #define INFORMATION_FRAME1 0x0B
 
 
+
+
 #define C_I(Ns) (Ns << 6);
+
+#define C_RR(Nr) ((Nr << 7) | 0x05)
+#define C_REJ(Nr) ((Nr << 7) | 0x01)
+
 
 #define ESC 0x7d
 #define FLAG_R 0x5e
 #define ESC_R 0x5d
 
-enum rec_status {Start, flag_rcv, a_rcv, c_rcv, bcc_ok, a_tx, c_tx, STOP};
+
+numretransmitions = 3;
+
+enum rec_status {Start, flag_rcv, a_rcv, c_rcv, bcc_ok, a_tx, c_tx, STOP, read_data, found_esc, next_esc};
 
 int fd;
 
@@ -310,8 +319,11 @@ int llwrite(int fd, char * buffer, int length) {
     bool rejected = 0;
     char byte = 0;
     char byte_c = 0;
+
+    int curr_retransmition = 0;
+
     
-    while (alarmCount < 3 && state_mach_tx != STOP)
+    while (curr_retransmition < numretransmitions && state_mach_tx != STOP)
         {
             
             write(fd,frame,frame_len);
@@ -365,8 +377,11 @@ int llwrite(int fd, char * buffer, int length) {
             }
 
         alarm(0);
-        if (rejected) {printf("rejected"); rejected = 0; state_mach_tx = Start; continue;}
-        if (accepted) {printf("accepted"); break;}
+        curr_retransmition++;
+        if (rejected && state_mach_tx == STOP) {printf("rejected"); rejected = 0; state_mach_tx = Start; continue;}
+        if (accepted && state_mach_tx == STOP) {printf("accepted"); accepted = 0; break;}
+        rejected = 0;
+        accepted = 0;
 
         }
         
@@ -382,10 +397,168 @@ int llwrite(int fd, char * buffer, int length) {
 }
 
 
-
+//–fd:       identificador da ligação de dados –buffer: array de caracteres recebidos 
 //return –array length (number of characters read) –negative value in case of error
-int llread(int fd, char * buffer){}
+int llread(int fd, char * buffer){
 
+
+
+    enum rec_status state_mach_rec = Start;
+    unsigned char byte;
+    unsigned char c_byte;
+
+    int i = 0;
+
+    unsigned char b_byte;
+
+
+    while(state_mach_rec != STOP){
+            if (read(fd, &byte, 1) > 0){
+                switch (state_mach_rec)
+                {
+                case Start:
+                    if (byte == FLAG){ state_mach_rec = flag_rcv; }
+                    //else {state_mach_rec = Start;}
+                    break;
+                case flag_rcv:
+                    if(byte == A_TRANSMITER){ state_mach_rec = a_rcv; }
+                    else if (byte == FLAG) { state_mach_rec = flag_rcv; }
+                    else {state_mach_rec = Start;}
+                    break;
+                case a_rcv:
+                    if(byte == C_I(0) || byte == C_I(1)){ state_mach_rec = c_rcv; c_byte = byte;}
+                    //else if (byte == C_DISC) ?
+                    else if (byte == FLAG){ state_mach_rec = flag_rcv; }
+                    else {state_mach_rec = Start;}
+                    break;
+                case c_rcv:
+                    if(byte == (A_TRANSMITER ^ c_byte)){ state_mach_rec = read_data; } //pode ler a informacao
+                    else if (byte == FLAG){ state_mach_rec = flag_rcv; }
+                    else {state_mach_rec = Start;}
+                    break;
+
+                case read_data:
+                    if (byte == ESC) state_mach_rec = found_esc;
+                    else if (byte == FLAG){
+                        unsigned char bcc2 = buffer[i-1];
+
+                        buffer[--i] = '\0';
+                        
+                        unsigned char bcc_try = buffer[0];
+
+                        for (int j = 1; j < i; j++ ){
+                            bcc_try ^= buffer[j];
+                        }
+
+                        if (bcc_try == bcc2){
+                            state_mach_rec = STOP;
+                            sendcontrol(A_RECEIVER,C_RR(Nr));
+                            Nr = (Nr + 1) % 2;
+                            return i;
+                        }
+
+                        else {
+                            sendcontrol(A_RECEIVER, C_REJ(Nr));
+                            return -1;
+                        }
+
+                    }
+                    else {buffer[i++] = byte;}
+
+                    break;
+
+                case found_esc:
+                    state_mach_rec = next_esc;
+                    break;
+
+                case next_esc:
+                    state_mach_rec = read_data;
+                    if (byte == FLAG_R)
+                        buffer[i++] = FLAG;
+                    else if (byte == ESC_R)
+                        buffer[i++] = ESC;
+                    break;
+
+
+                default:
+                    break;
+                }
+                    
+            }
+            
+        }
+
+    return -1;
+}
+
+
+
+
+//argumentos –fd: identificador da ligação de dados retorno –valor positivo em caso de sucesso –valor negativo em caso de erro
+int llclose(int fd){
+
+    unsigned char byte;
+    enum rec_status state_mach_tx = Start;
+
+    alarmCount = 0;
+
+
+    while (alarmCount < 3 && state_mach_tx != STOP)
+    {
+        
+        sendcontrol(A_TRANSMITER, DISC);
+        alarm(3); // Set alarm to be triggered in 3s
+        alarmEnabled = TRUE;
+
+        //so volta aqui passado 3 segundos
+
+        while(alarmEnabled == TRUE && state_mach_tx != STOP){
+            if (read(fd,&byte,1) > 0){
+                
+                switch (state_mach_tx)
+            {
+            case Start:
+                if (byte == FLAG){ state_mach_tx = flag_rcv; }
+                //else {state_mach_tx = Start;}
+                break;
+            case flag_rcv:
+                if(byte == A_RECEIVER){ state_mach_tx = a_rcv; }
+                else if (byte == FLAG) { state_mach_tx = flag_rcv; }
+                else {state_mach_tx = Start;}
+                break;
+            case a_rcv:
+                if(byte == DISC){ state_mach_tx = c_rcv; }
+                else if (byte == FLAG){ state_mach_tx = flag_rcv; }
+                else {state_mach_tx = Start;}
+                break;
+            case c_rcv:
+                if(byte == (A_RECEIVER ^ DISC)){ state_mach_tx = bcc_ok; }
+                else if (byte == FLAG){ state_mach_tx = flag_rcv; }
+                else {state_mach_tx = Start;}
+                break;
+            case bcc_ok:
+                if(byte == FLAG){ state_mach_tx = STOP; }
+                else {state_mach_tx = Start;}
+                break;
+            default:
+                break;
+            }
+            }
+        }
+        alarm(0);
+    }
+    
+
+
+
+    alarmCount = 0;
+    
+    if (state_mach_rec != STOP) return -1;
+    sendcontrol(fd, A_TRANSMITER, UA);
+    return close(fd);
+
+
+}
 
 
 
