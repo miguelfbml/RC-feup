@@ -38,7 +38,7 @@
 
 
 
-#define C_I(Ns) (Ns << 6);
+#define C_I(Ns) (Ns << 6)
 
 #define C_RR(Nr) ((Nr << 7) | 0x05)
 #define C_REJ(Nr) ((Nr << 7) | 0x01)
@@ -49,7 +49,7 @@
 #define ESC_R 0x5d
 
 
-numretransmitions = 3;
+int numretransmitions = 3;
 
 enum rec_status {Start, flag_rcv, a_rcv, c_rcv, bcc_ok, a_tx, c_tx, STOP, read_data, found_esc, next_esc};
 
@@ -197,7 +197,7 @@ int llopen(const char* porta, enum Status status)  {
             }
             
         }
-
+    printf("mandou receiver");
     sendcontrol(A_RECEIVER, UA);
     break;
 
@@ -265,6 +265,77 @@ int llopen(const char* porta, enum Status status)  {
 }
 
 
+
+//argumentos –fd: identificador da ligação de dados retorno –valor positivo em caso de sucesso –valor negativo em caso de erro
+int llclose(int fd){
+
+    unsigned char byte;
+    enum rec_status state_mach_tx = Start;
+
+    alarmCount = 0;
+
+
+    while (alarmCount < 3 && state_mach_tx != STOP)
+    {
+        
+        sendcontrol(A_TRANSMITER, DISC);
+        alarm(3); // Set alarm to be triggered in 3s
+        alarmEnabled = TRUE;
+
+        //so volta aqui passado 3 segundos
+
+        while(alarmEnabled == TRUE && state_mach_tx != STOP){
+            if (read(fd,&byte,1) > 0){
+                
+                switch (state_mach_tx)
+            {
+            case Start:
+                if (byte == FLAG){ state_mach_tx = flag_rcv; }
+                //else {state_mach_tx = Start;}
+                break;
+            case flag_rcv:
+                if(byte == A_RECEIVER){ state_mach_tx = a_rcv; }
+                else if (byte == FLAG) { state_mach_tx = flag_rcv; }
+                else {state_mach_tx = Start;}
+                break;
+            case a_rcv:
+                if(byte == DISC){ state_mach_tx = c_rcv; }
+                else if (byte == FLAG){ state_mach_tx = flag_rcv; }
+                else {state_mach_tx = Start;}
+                break;
+            case c_rcv:
+                if(byte == (A_RECEIVER ^ DISC)){ state_mach_tx = bcc_ok; }
+                else if (byte == FLAG){ state_mach_tx = flag_rcv; }
+                else {state_mach_tx = Start;}
+                break;
+            case bcc_ok:
+                if(byte == FLAG){ state_mach_tx = STOP; }
+                else {state_mach_tx = Start;}
+                break;
+            default:
+                break;
+            }
+            }
+        }
+        alarm(0);
+    }
+    
+
+
+
+    alarmCount = 0;
+    
+    if (state_mach_tx != STOP) return -1;
+    sendcontrol(A_TRANSMITER, UA);
+    return close(fd);
+
+
+}
+
+
+
+
+
 //return –number of writer characters –negative value in case of error
 int llwrite(int fd, char * buffer, int length) {
     int frame_len = length + 6;
@@ -299,7 +370,7 @@ int llwrite(int fd, char * buffer, int length) {
             frame_len++;
             frame = realloc(frame, frame_len);
             frame[pointer_f++] = ESC;
-            frame[pointer_f++] = FLAG_R;
+            frame[pointer_f++] = ESC_R;
             continue;
         }
 
@@ -321,6 +392,12 @@ int llwrite(int fd, char * buffer, int length) {
     char byte_c = 0;
 
     int curr_retransmition = 0;
+
+
+
+    for (int i = 0; i < frame_len; i++){
+        printf("-%x-",frame[i]);
+    }
 
     
     while (curr_retransmition < numretransmitions && state_mach_tx != STOP)
@@ -395,6 +472,14 @@ int llwrite(int fd, char * buffer, int length) {
         }
 
 }
+
+
+
+
+
+
+
+
 
 
 //–fd:       identificador da ligação de dados –buffer: array de caracteres recebidos 
@@ -494,71 +579,7 @@ int llread(int fd, char * buffer){
 
 
 
-//argumentos –fd: identificador da ligação de dados retorno –valor positivo em caso de sucesso –valor negativo em caso de erro
-int llclose(int fd){
 
-    unsigned char byte;
-    enum rec_status state_mach_tx = Start;
-
-    alarmCount = 0;
-
-
-    while (alarmCount < 3 && state_mach_tx != STOP)
-    {
-        
-        sendcontrol(A_TRANSMITER, DISC);
-        alarm(3); // Set alarm to be triggered in 3s
-        alarmEnabled = TRUE;
-
-        //so volta aqui passado 3 segundos
-
-        while(alarmEnabled == TRUE && state_mach_tx != STOP){
-            if (read(fd,&byte,1) > 0){
-                
-                switch (state_mach_tx)
-            {
-            case Start:
-                if (byte == FLAG){ state_mach_tx = flag_rcv; }
-                //else {state_mach_tx = Start;}
-                break;
-            case flag_rcv:
-                if(byte == A_RECEIVER){ state_mach_tx = a_rcv; }
-                else if (byte == FLAG) { state_mach_tx = flag_rcv; }
-                else {state_mach_tx = Start;}
-                break;
-            case a_rcv:
-                if(byte == DISC){ state_mach_tx = c_rcv; }
-                else if (byte == FLAG){ state_mach_tx = flag_rcv; }
-                else {state_mach_tx = Start;}
-                break;
-            case c_rcv:
-                if(byte == (A_RECEIVER ^ DISC)){ state_mach_tx = bcc_ok; }
-                else if (byte == FLAG){ state_mach_tx = flag_rcv; }
-                else {state_mach_tx = Start;}
-                break;
-            case bcc_ok:
-                if(byte == FLAG){ state_mach_tx = STOP; }
-                else {state_mach_tx = Start;}
-                break;
-            default:
-                break;
-            }
-            }
-        }
-        alarm(0);
-    }
-    
-
-
-
-    alarmCount = 0;
-    
-    if (state_mach_rec != STOP) return -1;
-    sendcontrol(fd, A_TRANSMITER, UA);
-    return close(fd);
-
-
-}
 
 
 
@@ -599,6 +620,31 @@ int main(int argc, char *argv[]){
 
 
     printf("%i",llopen(serialPortName, teste));
+
+
+    
+    if (teste == TRANSMITER){
+        char buf[5] = {0x00,0x7e,0x00,0x7d,0x00}; 
+        printf("transmitor");
+        llwrite(fd,buf,5);
+    }
+
+    int byte = 0;
+
+    if (teste == RECEIVER){
+        printf("chega ao while true");
+        while(true){
+            read(fd,&byte,1);
+            printf("0x");
+
+        }
+
+
+    }
+    
+
+
+
 
 
 
