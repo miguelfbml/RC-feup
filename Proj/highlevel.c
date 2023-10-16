@@ -85,6 +85,8 @@ int sendcontrol(unsigned char frame2, unsigned char frame3){
     frame[2] = frame3;
     frame[3] = frame2 ^ frame3;
     frame[4] = FLAG;
+    for (int i = 0; i < 5; i++)
+        printf("-%x-",frame[i]);
     write(fd, frame, 5);
     return 0;
 }
@@ -186,20 +188,20 @@ int llopen(const char* porta, enum Status status)  {
                     else {state_mach_rec = Start;}
                     break;
                 case bcc_ok:
-                    printf("\nSTOP NEXT\n");
                     if(byte == FLAG){ state_mach_rec = STOP; }
                     else {state_mach_rec = Start;}
+                    printf("\nbyte: %i\n",state_mach_rec);
                     break;
                 default:
                     break;
                 }
                     
             }
-            
+            printf("loop");
         }
-    printf("mandou receiver");
-    sendcontrol(A_RECEIVER, UA);
-    break;
+        printf("\nmandou receiver\n");
+        sendcontrol(A_RECEIVER, UA);
+        break;
 
     case TRANSMITER:
         printf("\n\nentrou trasmiter LLOPEN\n\n");
@@ -255,11 +257,10 @@ int llopen(const char* porta, enum Status status)  {
         }
         alarmCount = 0;
         
-    break;
+        break;
     default:
         break;
     }
-
 
     return fd;
 }
@@ -388,18 +389,19 @@ int llwrite(int fd, char * buffer, int length) {
     enum rec_status state_mach_tx = Start; 
     bool accepted = 0;
     bool rejected = 0;
-    char byte = 0;
-    char byte_c = 0;
+    unsigned char byte = 0;
+    unsigned char byte_c = 0;
 
     int curr_retransmition = 0;
 
 
-
+    printf("emissor envia: \n");
     for (int i = 0; i < frame_len; i++){
         printf("-%x-",frame[i]);
     }
 
-    
+    printf("\n\n\n");
+    printf("emissor recebe: \n");
     while (curr_retransmition < numretransmitions && state_mach_tx != STOP)
         {
             
@@ -412,6 +414,7 @@ int llwrite(int fd, char * buffer, int length) {
 
             while(alarmEnabled == TRUE && state_mach_tx != STOP){
                 if (read(fd,&byte,1) > 0){
+                    printf("-%x-",byte);
                     
                     switch (state_mach_tx)
                 {
@@ -467,7 +470,8 @@ int llwrite(int fd, char * buffer, int length) {
 
         if (accepted > 0) return frame_len;
         else {
-            llclose(fd);   
+            printf("\n not accepted \n");
+            //llclose(fd);   
             return -1;
         }
 
@@ -496,9 +500,10 @@ int llread(int fd, char * buffer){
 
     unsigned char b_byte;
 
-
+    printf("recetor lê: \n");
     while(state_mach_rec != STOP){
             if (read(fd, &byte, 1) > 0){
+                printf("-%x-",byte);
                 switch (state_mach_rec)
                 {
                 case Start:
@@ -523,18 +528,24 @@ int llread(int fd, char * buffer){
                     break;
 
                 case read_data:
-                    if (byte == ESC) state_mach_rec = found_esc;
+                    if (byte == ESC) state_mach_rec = next_esc;
                     else if (byte == FLAG){
                         unsigned char bcc2 = buffer[i-1];
 
                         buffer[--i] = '\0';
                         
+                        printf("\n buffer está: \n");
+                        for (int z = 0; z < i; z++){
+                            printf("-%x-",buffer[z]);
+                        }
+
                         unsigned char bcc_try = buffer[0];
 
                         for (int j = 1; j < i; j++ ){
                             bcc_try ^= buffer[j];
                         }
 
+                        printf("recetor envia: \n");
                         if (bcc_try == bcc2){
                             state_mach_rec = STOP;
                             sendcontrol(A_RECEIVER,C_RR(Nr));
@@ -552,11 +563,8 @@ int llread(int fd, char * buffer){
 
                     break;
 
-                case found_esc:
-                    state_mach_rec = next_esc;
-                    break;
-
                 case next_esc:
+                    printf("esc exception: %x\n",byte);
                     state_mach_rec = read_data;
                     if (byte == FLAG_R)
                         buffer[i++] = FLAG;
@@ -621,33 +629,59 @@ int main(int argc, char *argv[]){
 
     printf("%i",llopen(serialPortName, teste));
 
+    sleep(1);
 
     
     if (teste == TRANSMITER){
-        char buf[5] = {0x00,0x7e,0x00,0x7d,0x00}; 
+        sleep(1);
+        unsigned char buf[5] = {0x00,0x7e,0x00,0x7d,0x00}; 
+        unsigned char* buf_point = buf;
+        llwrite(fd,buf_point,5);
+        
+        /*
+        llwrite(fd,buf_point,3);
+        buf_point++;
+        buf_point++;
+        buf_point++;
+        llwrite(fd,buf_point,2);
+        */
         printf("transmitor");
-        llwrite(fd,buf,5);
     }
 
     int byte = 0;
 
+    unsigned char buff_received[] = {0};
+    unsigned char* buff_received_point = buff_received;
     if (teste == RECEIVER){
-        printf("chega ao while true");
+
+        llread(fd, buff_received_point);
+
+
+        /*
+        llread(fd, buff_received_point);
+        buff_received_point++;
+        buff_received_point++;
+        buff_received_point++;
+        llread(fd, buff_received_point);
+        */
+        /*
         while(true){
-            read(fd,&byte,1);
-            printf("0x");
+            //printf("\nchega ao while true\n");
+            if (read(fd,&byte,1) > 0){
+            printf("0x:%x", byte);
+            }
 
         }
-
+        */
 
     }
+    
     
 
 
 
 
-
-
+   sleep(1);
 
 
     if (tcsetattr(fd, TCSANOW, &oldtio) == -1)
