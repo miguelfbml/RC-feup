@@ -48,6 +48,8 @@
 #define FLAG_R 0x5e
 #define ESC_R 0x5d
 
+#define C_DISC 0x0B
+
 
 int numretransmitions = 3;
 
@@ -285,8 +287,13 @@ int llclose(int fd){
 
         //so volta aqui passado 3 segundos
 
+        printf("\n llclose recebe:\n");
         while(alarmEnabled == TRUE && state_mach_tx != STOP){
             if (read(fd,&byte,1) > 0){
+
+                printf("-%x-",byte);
+
+
                 
                 switch (state_mach_tx)
             {
@@ -328,6 +335,18 @@ int llclose(int fd){
     
     if (state_mach_tx != STOP) return -1;
     sendcontrol(A_TRANSMITER, UA);
+
+    
+    sleep(1);
+
+
+    if (tcsetattr(fd, TCSANOW, &oldtio) == -1)
+    {
+        perror("tcsetattr");
+        exit(-1);
+    }
+
+
     return close(fd);
 
 
@@ -517,15 +536,23 @@ int llread(int fd, char * buffer){
                     break;
                 case a_rcv:
                     if(byte == C_I(0) || byte == C_I(1)){ state_mach_rec = c_rcv; c_byte = byte;}
-                    //else if (byte == C_DISC) ?
+                    else if (byte == C_DISC) { ////////////// aqui
+                        c_byte = C_DISC; 
+                        state_mach_rec = c_rcv;
+                    }
+                    else if (byte == UA){
+                        c_byte = UA;
+                        state_mach_rec = c_rcv;
+                    }
                     else if (byte == FLAG){ state_mach_rec = flag_rcv; }
                     else {state_mach_rec = Start;}
                     break;
                 case c_rcv:
-                    if(byte == (A_TRANSMITER ^ c_byte)){ state_mach_rec = read_data; } //pode ler a informacao
-                    else if (byte == FLAG){ state_mach_rec = flag_rcv; }
+                    if( byte == (A_TRANSMITER ^ c_byte)){ state_mach_rec = read_data; } //pode ler a informacao
+                    else if ( byte == FLAG){ state_mach_rec = flag_rcv; }
                     else {state_mach_rec = Start;}
                     break;
+                    
 
                 case read_data:
                     if (byte == ESC) state_mach_rec = next_esc;
@@ -573,6 +600,9 @@ int llread(int fd, char * buffer){
                     break;
 
 
+
+
+
                 default:
                     break;
                 }
@@ -580,6 +610,32 @@ int llread(int fd, char * buffer){
             }
             
         }
+
+
+
+        if (c_byte = C_DISC){
+            sendcontrol(A_RECEIVER, C_DISC);   
+        }
+
+
+
+        if (c_byte = UA){
+
+        sleep(1);
+
+        if (tcsetattr(fd, TCSANOW, &oldtio) == -1)
+        {
+            perror("tcsetattr");
+            exit(-1);
+        }
+
+        close(fd);
+
+        }
+
+
+
+
 
     return -1;
 }
@@ -636,15 +692,18 @@ int main(int argc, char *argv[]){
         sleep(1);
         unsigned char buf[5] = {0x00,0x7e,0x00,0x7d,0x00}; 
         unsigned char* buf_point = buf;
-        llwrite(fd,buf_point,5);
+        //llwrite(fd,buf_point,5);
         
-        /*
-        llwrite(fd,buf_point,3);
+        
+        llwrite(fd,buf_point,4);
         buf_point++;
         buf_point++;
         buf_point++;
-        llwrite(fd,buf_point,2);
-        */
+        buf_point++;
+        llwrite(fd,buf_point,1);
+
+        llclose(fd);
+        
         printf("transmitor");
     }
 
@@ -655,6 +714,11 @@ int main(int argc, char *argv[]){
     if (teste == RECEIVER){
 
         llread(fd, buff_received_point);
+        buff_received_point++;
+        buff_received_point++;
+        buff_received_point++;
+        buff_received_point++;
+        llread(fd, buff_received_point);
 
 
         /*
@@ -664,6 +728,7 @@ int main(int argc, char *argv[]){
         buff_received_point++;
         llread(fd, buff_received_point);
         */
+        
         /*
         while(true){
             //printf("\nchega ao while true\n");
@@ -673,6 +738,11 @@ int main(int argc, char *argv[]){
 
         }
         */
+       printf("\n o buffer ficou com \n");
+       for (int i = 0; i < 5; i++){
+        printf("-%x-",buff_received[i]);
+       }
+
 
     }
     
@@ -680,7 +750,7 @@ int main(int argc, char *argv[]){
 
 
 
-
+    /*
    sleep(1);
 
 
@@ -691,6 +761,7 @@ int main(int argc, char *argv[]){
     }
 
     close(fd);
+    */
 
 
     return 0;
