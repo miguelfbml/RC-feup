@@ -704,16 +704,18 @@ int main(int argc, char *argv[]){
     
     if (teste == TRANSMITER){
         sleep(1);
-        unsigned char buf[5] = {0x00,0x7e,0x00,0x7d,0x00}; 
+        unsigned char buf[11] = {0x00, 0xaa,0x7e, 0x7e, 0x7e, 0x7e, 0x7e,0x7e , 0x00, 0x7d, 0x00}; 
         unsigned char* buf_point = buf;
         //llwrite(fd,buf_point,5);
         
         
-        llwrite(fd,buf_point,4);
-        buf_point++;
-        buf_point++;
-        buf_point++;
-        buf_point++;
+        llwrite(fd,buf_point,10);
+        int n = 10 ;
+        while (n>0)
+        {
+            buf_point++;   
+            n--;
+        }
         llwrite(fd,buf_point,1);
 
         llclose(fd);
@@ -732,10 +734,12 @@ int main(int argc, char *argv[]){
     if (teste == RECEIVER){
 
         llread(fd, buff_received_point);
-        buff_received_point++;
-        buff_received_point++;
-        buff_received_point++;
-        buff_received_point++;
+        int n = 10 ;
+        while (n>0)
+        {
+            buff_received_point++;   
+            n--;
+        }
         llread(fd, buff_received_point);
         //buff_received_point++;
         //buff_received_point++;
@@ -765,7 +769,7 @@ int main(int argc, char *argv[]){
         }
         */
        printf("\n o buffer ficou com \n");
-       for (int i = 0; i < 5; i++){
+       for (int i = 0; i < 11; i++){
         printf("-%x-",buff_received[i]);
        }
 
