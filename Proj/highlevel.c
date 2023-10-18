@@ -335,10 +335,11 @@ int llclose(int fd){
     
     if (state_mach_tx != STOP) return -1;
     printf("\n SENDING UA\n");
+    sleep(1);
     sendcontrol(A_TRANSMITER, UA);
 
     
-    sleep(1);
+    
 
 
     if (tcsetattr(fd, TCSANOW, &oldtio) == -1)
@@ -348,8 +349,7 @@ int llclose(int fd){
     }
 
 
-    return close(fd);
-
+    return 0;
 
 }
 
@@ -520,7 +520,7 @@ int llread(int fd, char * buffer){
 
     unsigned char b_byte;
 
-    printf("recetor lê: \n");
+    printf("\n\n STARING LLREAD: \n\n");
     while(state_mach_rec != STOP){
             if (read(fd, &byte, 1) > 0){
                 printf("-%x-",byte);
@@ -543,6 +543,7 @@ int llread(int fd, char * buffer){
                         printf(" \n FOI DETETADO NO READ ANTES \n");
                     }
                     else if (byte == UA){
+                        printf("\n\n /////UA RECEIVED /////\n\n");
                         c_byte = UA;
                         state_mach_rec = c_rcv;
                     }
@@ -624,14 +625,14 @@ int llread(int fd, char * buffer){
 
 
 
-        if (c_byte = C_DISC){
+        if (c_byte == C_DISC){
             printf("\n READ SENT DISC TO LLCLOSE \n");   
             sendcontrol(A_RECEIVER, C_DISC);   
         }
 
 
 
-        if (c_byte = UA){
+        if (c_byte == UA){
 
         sleep(1);
 
@@ -641,7 +642,7 @@ int llread(int fd, char * buffer){
             exit(-1);
         }
 
-
+        printf("\n\n////////////CLOSING/////////////// \n\n");
         close(fd);
 
         }
@@ -716,6 +717,11 @@ int main(int argc, char *argv[]){
         llwrite(fd,buf_point,1);
 
         llclose(fd);
+        printf("\n\nLLCLOSE DONE\n\n");
+        sleep(1);
+        sendcontrol(A_TRANSMITER, UA);
+
+
         
     }
 
@@ -733,7 +739,12 @@ int main(int argc, char *argv[]){
         llread(fd, buff_received_point);
         //buff_received_point++;
         //buff_received_point++;
+        printf("\n\n3RD READ\n\n");
         llread(fd, buff_received_point);
+        printf("\n\n4TH READ\n\n");
+        llread(fd, buff_received_point);
+
+
 
 
         /*
