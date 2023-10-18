@@ -334,7 +334,8 @@ int llclose(int fd){
     alarmCount = 0;
     
     if (state_mach_tx != STOP) return -1;
-    //sendcontrol(A_TRANSMITER, UA);
+    printf("\n SENDING UA\n");
+    sendcontrol(A_TRANSMITER, UA);
 
     
     sleep(1);
@@ -624,7 +625,7 @@ int llread(int fd, char * buffer){
 
 
         if (c_byte = C_DISC){
-            printf("\n FOI DETETADO NO READ \n");
+            printf("\n READ SENT DISC TO LLCLOSE \n");   
             sendcontrol(A_RECEIVER, C_DISC);   
         }
 
@@ -716,7 +717,6 @@ int main(int argc, char *argv[]){
 
         llclose(fd);
         
-        printf("transmitor");
     }
 
     int byte = 0;
