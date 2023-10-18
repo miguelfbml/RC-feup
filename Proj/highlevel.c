@@ -36,6 +36,8 @@
 #define INFORMATION_FRAME1 0x0B
 
 
+
+
 #define C_I(Ns) (Ns << 6)
 
 #define C_RR(Nr) ((Nr << 7) | 0x05)
@@ -64,6 +66,7 @@ int alarmCount = 0;
 
 int Ns = 0;
 int Nr = 1;
+
 
 
 struct termios oldtio;
@@ -265,16 +268,16 @@ int llopen(const char* porta, enum Status status)  {
 }
 
 
+
 //argumentos –fd: identificador da ligação de dados retorno –valor positivo em caso de sucesso –valor negativo em caso de erro
 int llclose(int fd){
-    printf("\n\n IN LLCLOSE\n\n");
 
     unsigned char byte;
     enum rec_status state_mach_tx = Start;
 
     alarmCount = 0;
 
-
+    sleep(1);
     while (alarmCount < 3 && state_mach_tx != STOP)
     {
         
@@ -331,8 +334,7 @@ int llclose(int fd){
     alarmCount = 0;
     
     if (state_mach_tx != STOP) return -1;
-    sendcontrol(A_TRANSMITER, UA);
-    printf("\n\n  SENT UA FROM LLCLOSE \n\n");
+    //sendcontrol(A_TRANSMITER, UA);
 
     
     sleep(1);
@@ -351,6 +353,9 @@ int llclose(int fd){
 }
 
 
+
+
+
 //return –number of writer characters –negative value in case of error
 int llwrite(int fd, char * buffer, int length) {
     int frame_len = length + 6;
@@ -366,8 +371,9 @@ int llwrite(int fd, char * buffer, int length) {
     for (int i = 1; i < length; i++){
         bcc2 ^= buffer[i];
     }
-    //1-send in the buffer a filler so that we can add bcc without memory problems find:
-    //2-extra if find:
+
+    //memccpy(frame+4,buffer,length);
+
     int pointer_f = 4;
 
     for (int i = 0; i < length; i++){
@@ -396,7 +402,7 @@ int llwrite(int fd, char * buffer, int length) {
 
     }
 
-    frame[pointer_f++] = bcc2;//no stuffing find:
+    frame[pointer_f++] = bcc2;
     frame[pointer_f] = FLAG;
 
     enum rec_status state_mach_tx = Start; 
@@ -408,12 +414,13 @@ int llwrite(int fd, char * buffer, int length) {
     int curr_retransmition = 0;
 
 
-    printf("\n\nEmissor envia (post stuffing): \n\n");
+    printf("emissor envia: \n");
     for (int i = 0; i < frame_len; i++){
-        printf("- %x -",frame[i]);
+        printf("-%x-",frame[i]);
     }
 
-    printf("\n\n Emissor recebe: \n\n");
+    printf("\n\n\n");
+    printf("emissor recebe: \n");
     while (curr_retransmition < numretransmitions && state_mach_tx != STOP)
         {
             
@@ -426,7 +433,7 @@ int llwrite(int fd, char * buffer, int length) {
 
             while(alarmEnabled == TRUE && state_mach_tx != STOP){
                 if (read(fd,&byte,1) > 0){
-                    printf("/-%x-",byte);
+                    printf("-%x-",byte);
                     
                     switch (state_mach_tx)
                 {
@@ -470,12 +477,9 @@ int llwrite(int fd, char * buffer, int length) {
 
         alarm(0);
         curr_retransmition++;
-
-        //find: retransmit afterREJ
-
-        if (rejected && state_mach_tx == STOP) {printf("\n\nrejected\n\n"); rejected = 0; state_mach_tx = Start; continue;}
-        if (accepted && state_mach_tx == STOP) {printf("\n\naccepted\n\n"); accepted = 0; break;}
-        rejected = 0;//redundante? find:
+        if (rejected && state_mach_tx == STOP) {printf("rejected"); rejected = 0; state_mach_tx = Start; continue;}
+        if (accepted && state_mach_tx == STOP) {printf("accepted"); accepted = 0; break;}
+        rejected = 0;
         accepted = 0;
 
         }
@@ -493,6 +497,14 @@ int llwrite(int fd, char * buffer, int length) {
 }
 
 
+
+
+
+
+
+
+
+
 //–fd:       identificador da ligação de dados –buffer: array de caracteres recebidos 
 //return –array length (number of characters read) –negative value in case of error
 int llread(int fd, char * buffer){
@@ -508,7 +520,7 @@ int llread(int fd, char * buffer){
     unsigned char b_byte;
 
     printf("recetor lê: \n");
-    while(state_mach_rec != STOP){//find: se erro no write?
+    while(state_mach_rec != STOP){
             if (read(fd, &byte, 1) > 0){
                 printf("-%x-",byte);
                 switch (state_mach_rec)
@@ -527,6 +539,7 @@ int llread(int fd, char * buffer){
                     else if (byte == C_DISC) { ////////////// aqui
                         c_byte = C_DISC; 
                         state_mach_rec = c_rcv;
+                        printf(" \n FOI DETETADO NO READ ANTES \n");
                     }
                     else if (byte == UA){
                         c_byte = UA;
@@ -536,7 +549,11 @@ int llread(int fd, char * buffer){
                     else {state_mach_rec = Start;}
                     break;
                 case c_rcv:
-                    if( byte == (A_TRANSMITER ^ c_byte)){ state_mach_rec = read_data; } //pode ler a informacao
+                    if ( byte == (A_TRANSMITER ^ c_byte) && c_byte == DISC){ state_mach_rec = bcc_ok; printf("\n está certo !!!!! \n");}
+                    else if ( byte == (A_TRANSMITER ^ c_byte) && c_byte == UA) {state_mach_rec = bcc_ok; }
+
+                    else if( byte == (A_TRANSMITER ^ c_byte)){ state_mach_rec = read_data; } //pode ler a informacao
+                    
                     else if ( byte == FLAG){ state_mach_rec = flag_rcv; }
                     else {state_mach_rec = Start;}
                     break;
@@ -544,8 +561,8 @@ int llread(int fd, char * buffer){
 
                 case read_data:
                     if (byte == ESC) state_mach_rec = next_esc;
-                    else if (byte == FLAG){//
-                        unsigned char bcc2 = buffer[i-1];//não precebi find:
+                    else if (byte == FLAG){
+                        unsigned char bcc2 = buffer[i-1];
 
                         buffer[--i] = '\0';
                         
@@ -587,8 +604,13 @@ int llread(int fd, char * buffer){
                         buffer[i++] = ESC;
                     break;
 
+                case bcc_ok:
+                    printf("\nno bcc ok está: %x \n ",byte);
+                    if (byte == FLAG) {
+                        state_mach_rec = STOP;
+                    }
 
-
+                    break;
 
 
                 default:
@@ -602,14 +624,13 @@ int llread(int fd, char * buffer){
 
 
         if (c_byte = C_DISC){
-            printf("\n\nREAD DISC, SENT DISC\n\n");
-            sendcontrol(A_RECEIVER, C_DISC);
+            printf("\n FOI DETETADO NO READ \n");
+            sendcontrol(A_RECEIVER, C_DISC);   
         }
 
 
 
         if (c_byte = UA){
-        printf("\n\nREAD UA, CLOSING\n\n");
 
         sleep(1);
 
@@ -618,6 +639,7 @@ int llread(int fd, char * buffer){
             perror("tcsetattr");
             exit(-1);
         }
+
 
         close(fd);
 
@@ -631,6 +653,16 @@ int llread(int fd, char * buffer){
 }
 
 
+
+
+
+
+
+
+
+
+
+
 int main(int argc, char *argv[]){
     if (argc < 3)
     {
@@ -641,6 +673,9 @@ int main(int argc, char *argv[]){
                argv[0]);
         exit(1);
     }
+
+
+
 
     const char *serialPortName = argv[1];
     const char *status_ = argv[2];
@@ -681,7 +716,7 @@ int main(int argc, char *argv[]){
 
         llclose(fd);
         
-        printf("\n\ntransmitor\n\n");
+        printf("transmitor");
     }
 
     int byte = 0;
@@ -696,8 +731,11 @@ int main(int argc, char *argv[]){
         buff_received_point++;
         buff_received_point++;
         llread(fd, buff_received_point);
+        //buff_received_point++;
+        //buff_received_point++;
+        llread(fd, buff_received_point);
 
-        //receor está a acabar find: talvez adicionar mais um read para close
+
         /*
         llread(fd, buff_received_point);
         buff_received_point++;
@@ -723,6 +761,11 @@ int main(int argc, char *argv[]){
 
     }
     
+    
+
+
+
+    /*
    sleep(1);
 
 
@@ -733,7 +776,7 @@ int main(int argc, char *argv[]){
     }
 
     close(fd);
-    
+    */
 
 
     return 0;
