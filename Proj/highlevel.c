@@ -38,6 +38,7 @@
 
 
 
+
 #define C_I(Ns) (Ns << 6)
 
 #define C_RR(Nr) ((Nr << 7) | 0x05)
@@ -51,7 +52,12 @@
 #define C_DISC 0x0B
 
 
+
+int delay = 3;
 int numretransmitions = 3;
+
+
+
 
 enum rec_status {Start, flag_rcv, a_rcv, c_rcv, bcc_ok, a_tx, c_tx, STOP, read_data, found_esc, next_esc};
 
@@ -212,11 +218,11 @@ int llopen(const char* porta, enum Status status)  {
 
         enum rec_status state_mach_tx = Start; 
 
-        while (alarmCount < 3 && state_mach_tx != STOP)
+        while (alarmCount < numretransmitions && state_mach_tx != STOP)
         {
             
             sendcontrol(A_TRANSMITER, SET);
-            alarm(3); // Set alarm to be triggered in 3s
+            alarm(delay); // Set alarm to be triggered in 3s
             alarmEnabled = TRUE;
 
             //so volta aqui passado 3 segundos
@@ -278,11 +284,11 @@ int llclose(int fd){
     alarmCount = 0;
 
     sleep(1);
-    while (alarmCount < 3 && state_mach_tx != STOP)
+    while (alarmCount < numretransmitions && state_mach_tx != STOP)
     {
         
         sendcontrol(A_TRANSMITER, DISC);
-        alarm(3); // Set alarm to be triggered in 3s
+        alarm(delay); // Set alarm to be triggered in 3s
         alarmEnabled = TRUE;
 
         //so volta aqui passado 3 segundos
@@ -427,7 +433,7 @@ int llwrite(int fd, char * buffer, int length) {
             
             write(fd,frame,frame_len);
             //sendcontrol(A_TRANSMITER, SET);
-            alarm(3); // Set alarm to be triggered in 3s
+            alarm(delay); // Set alarm to be triggered in 3s
             alarmEnabled = TRUE;
 
             //so volta aqui passado 3 segundos
@@ -704,7 +710,7 @@ int main(int argc, char *argv[]){
     
     if (teste == TRANSMITER){
         sleep(1);
-        unsigned char buf[11] = {0x00, 0xaa,0x7e, 0x7e, 0x7e, 0x7e, 0x7e,0x7e , 0x00, 0x7d, 0x00}; 
+        unsigned char buf[11] = {0x00, 0x8a, 0x7a, 0x7e, 0x7e, 0x7e, 0x7e,0x7e , 0x00, 0x7d, 0x00}; 
         unsigned char* buf_point = buf;
         //llwrite(fd,buf_point,5);
         
