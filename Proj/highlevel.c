@@ -54,7 +54,7 @@
 #define C_DISC 0x0B
 
 
-
+//TESTE
 int delay = 3;
 int numretransmitions = 3;
 
