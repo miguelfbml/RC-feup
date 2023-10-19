@@ -35,7 +35,7 @@
 #define INFORMATION_FRAME0 0x00
 #define INFORMATION_FRAME1 0x0B
 
-
+//ruben
 
 
 
@@ -217,6 +217,8 @@ int llopen(const char* porta, enum Status status)  {
         (void)signal(SIGALRM, alarmHandler);
 
         enum rec_status state_mach_tx = Start; 
+
+        alarmCount = 0;
 
         while (alarmCount < numretransmitions && state_mach_tx != STOP)
         {
