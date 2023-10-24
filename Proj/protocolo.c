@@ -24,7 +24,7 @@
 
 #define FLAG 0x7E
 #define A_RECEIVER 0x01
-#define A_TRANSMITER 0x03
+#define A_TRANSMITTER 0x03
 #define SET 0x03
 #define UA 0x07
 #define RR0 0x05
@@ -73,7 +73,7 @@ int fd;
 enum Status
 {
     RECEIVER,
-    TRANSMITER
+    TRANSMITTER
 };
 
 int alarmEnabled = FALSE;
@@ -190,7 +190,7 @@ int llopen(const char *porta, enum Status status)
                     // else {state_mach_rec = Start;}
                     break;
                 case flag_rcv:
-                    if (byte == A_TRANSMITER)
+                    if (byte == A_TRANSMITTER)
                     {
                         state_mach_rec = a_rcv;
                     }
@@ -218,7 +218,7 @@ int llopen(const char *porta, enum Status status)
                     }
                     break;
                 case c_rcv:
-                    if (byte == (A_TRANSMITER ^ SET))
+                    if (byte == (A_TRANSMITTER ^ SET))
                     {
                         state_mach_rec = bcc_ok;
                     }
@@ -252,8 +252,8 @@ int llopen(const char *porta, enum Status status)
         sendcontrol(A_RECEIVER, UA);
         break;
 
-    case TRANSMITER:
-        printf("\n\nentrou trasmiter LLOPEN\n\n");
+    case TRANSMITTER:
+        printf("\n\n Entrou trasmiter LLOPEN \n\n");
         /* code */
         (void)signal(SIGALRM, alarmHandler);
 
@@ -264,7 +264,7 @@ int llopen(const char *porta, enum Status status)
         while (alarmCount < numretransmitions && state_mach_tx != STOP)
         {
 
-            sendcontrol(A_TRANSMITER, SET);
+            sendcontrol(A_TRANSMITTER, SET);
             alarm(delay); // Set alarm to be triggered in 3s
             alarmEnabled = TRUE;
 
@@ -367,7 +367,7 @@ int llclose(int fd)
     while (alarmCount < numretransmitions && state_mach_tx != STOP)
     {
 
-        sendcontrol(A_TRANSMITER, DISC);
+        sendcontrol(A_TRANSMITTER, DISC);
         alarm(delay); // Set alarm to be triggered in 3s
         alarmEnabled = TRUE;
 
@@ -456,7 +456,7 @@ int llclose(int fd)
         return -1;
     printf("\n SENDING UA\n");
     sleep(1);
-    sendcontrol(A_TRANSMITER, UA);
+    sendcontrol(A_TRANSMITTER, UA);
 
     if (tcsetattr(fd, TCSANOW, &oldtio) == -1)
     {
@@ -475,7 +475,7 @@ int llwrite(int fd, char *buffer, int length)
     unsigned char *frame = (unsigned char *)malloc(frame_len * sizeof(char));
 
     frame[0] = FLAG;
-    frame[1] = A_TRANSMITER;
+    frame[1] = A_TRANSMITTER;
     frame[2] = C_I(Ns);
     frame[3] = frame[1] ^ frame[2];
 
@@ -575,7 +575,7 @@ int llwrite(int fd, char *buffer, int length)
         {
 
             write(fd,frame,frame_len);
-            //sendcontrol(A_TRANSMITER, SET);
+            //sendcontrol(A_TRANSMITTER, SET);
             alarm(delay); // Set alarm to be triggered in 3s
             alarmEnabled = TRUE;
 
@@ -632,7 +632,7 @@ int llwrite(int fd, char *buffer, int length)
         rejected = 0;
         accepted = 0;
 
-        }
+        }//001  0 1010
 
         alarmCount = 0;
         free(frame);
@@ -643,15 +643,7 @@ int llwrite(int fd, char *buffer, int length)
             //llclose(fd);
             return -1;
         }
-
 }
-
-
-
-
-
-
-
 
 
 
@@ -680,7 +672,7 @@ int llread(int fd, char * buffer){
                     //else {state_mach_rec = Start;}
                     break;
                 case flag_rcv:
-                    if(byte == A_TRANSMITER){ state_mach_rec = a_rcv; }
+                    if(byte == A_TRANSMITTER){ state_mach_rec = a_rcv; }
                     else if (byte == FLAG) { state_mach_rec = flag_rcv; }
                     else {state_mach_rec = Start;}
                     break;
@@ -700,10 +692,10 @@ int llread(int fd, char * buffer){
                     else {state_mach_rec = Start;}
                     break;
                 case c_rcv:
-                    if ( byte == (A_TRANSMITER ^ c_byte) && c_byte == DISC){ state_mach_rec = bcc_ok; printf("\n está certo !!!!! \n");}
-                    else if ( byte == (A_TRANSMITER ^ c_byte) && c_byte == UA) {state_mach_rec = bcc_ok; }
+                    if ( byte == (A_TRANSMITTER ^ c_byte) && c_byte == DISC){ state_mach_rec = bcc_ok; printf("\n está certo !!!!! \n");}
+                    else if ( byte == (A_TRANSMITTER ^ c_byte) && c_byte == UA) {state_mach_rec = bcc_ok; }
 
-                    else if( byte == (A_TRANSMITER ^ c_byte)){ state_mach_rec = read_data; } //pode ler a informacao
+                    else if( byte == (A_TRANSMITTER ^ c_byte)){ state_mach_rec = read_data; } //pode ler a informacao
 
                     else if ( byte == FLAG){ state_mach_rec = flag_rcv; }
                     else {state_mach_rec = Start;}
@@ -804,7 +796,6 @@ int llread(int fd, char * buffer){
 }
 
 
-
 #define MAX_PAYLOAD_SIZE 40
 
 
@@ -821,7 +812,7 @@ unsigned char * MakeCPacket(unsigned char control, char *filename, long int leng
     packet[pos++] = 2;
     packet[pos++] = 0;
     packet[pos++] = L1;
-    
+    //2 length
 
     for (int i = 0 ; i < L1 ; i++) {
         packet[2+L1-i] = length & 0xFF;
@@ -834,10 +825,10 @@ unsigned char * MakeCPacket(unsigned char control, char *filename, long int leng
 
     packet[pos++]=L2;
 
+    
     memcpy(packet+pos, filename, L2);
     return packet;
 }
-
 
 
 unsigned char * MakeDPacket(unsigned char control, unsigned char *data, int length, unsigned int *size){
@@ -854,26 +845,25 @@ unsigned char * MakeDPacket(unsigned char control, unsigned char *data, int leng
 }
 
 
-
-
-
 int main(int argc, char *argv[])
 {
-
-
-
 
     if (argc < 3)
     {
         printf("Incorrect program usage\n"
-               "Usage: %s <SerialPort>\n"
-               "Example: %s /dev/ttyS1\n",
+               "Usage: %s <SerialPort> <device>\n"
+               "Example: %s /dev/ttyS1 recetor\n",
                argv[0],
                argv[0]);
         exit(1);
     }
 
 
+    // unsigned char * delt = (unsigned char *) malloc(2);
+    // delt[0] = 'a';
+    // delt[1] = 'b';
+
+    // printf("\n\n  %s \n\n",delt);
     
 
     const char *serialPortName = argv[1];
@@ -881,33 +871,33 @@ int main(int argc, char *argv[])
     char *filename = "pinguim.gif";
 
 
-    enum Status teste = TRANSMITER;
+    enum Status device = TRANSMITTER;
 
     if (strcmp(status_, "recetor") == 0) {
         printf("\n\nMAIN STRCMP RECEIVER\n\n");
-        teste = RECEIVER;
+        device = RECEIVER;
     }
     else if (strcmp(status_,"emissor") == 0){
         printf("\n\nMAIN STRCMP TRANSMITTER\n\n");
-        teste = TRANSMITER;
+        device = TRANSMITTER;
    }
 
 
 
-    int fd = llopen(serialPortName, teste);
+    int fd = llopen(serialPortName, device);
         if (fd < 0) {
         perror("Connection error\n");
         exit(-1);
     }
 
 
-    switch (teste)
+    switch (device)
     {
-    case TRANSMITER:
+    case TRANSMITTER:
         
         FILE* file = fopen(filename, "rb");
         if (file == NULL) {
-            perror("File not found\n");
+            perror("\nFile not found\n");
             exit(-1);
         }
 
@@ -1006,7 +996,6 @@ int main(int argc, char *argv[])
         //nome feito
 
 
-        memcpy(nome + Name_NBytes, "_Novo", 5);
 
         FILE* newFile = fopen((char *) nome, "wb+");
 
