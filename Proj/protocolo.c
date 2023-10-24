@@ -327,9 +327,10 @@ int llopen(const char *porta, enum Status status)
                         }
                         break;
                     case bcc_ok:
-                        printf("\nSTOP NEXT\n");
+
                         if (byte == FLAG)
                         {
+                            printf("\nWILL STOP\n");
                             state_mach_tx = STOP;
                         }
                         else
@@ -344,6 +345,7 @@ int llopen(const char *porta, enum Status status)
             }
             alarm(0);
         }
+        printf("\nCHECKPOINT#1\n");
         alarmCount = 0;
 
         break;
@@ -517,7 +519,7 @@ int llwrite(int fd, char *buffer, int length)
         }
     }
 
-    //frame[pointer_f++] = bcc2;
+    // frame[pointer_f++] = bcc2;
 
     //
     if (bcc2 == FLAG)
@@ -536,9 +538,11 @@ int llwrite(int fd, char *buffer, int length)
         frame[pointer_f++] = ESC_R;
     }
 
-    else {frame[pointer_f++] = bcc2;}
+    else
+    {
+        frame[pointer_f++] = bcc2;
+    }
     //
-
 
     /*
 
@@ -552,7 +556,6 @@ int llwrite(int fd, char *buffer, int length)
 
     */
 
-
     frame[pointer_f] = FLAG;
 
     enum rec_status state_mach_tx = Start;
@@ -563,95 +566,142 @@ int llwrite(int fd, char *buffer, int length)
 
     int curr_retransmition = 0;
 
-
     printf("emissor envia: \n");
-    for (int i = 0; i < frame_len; i++){
-        printf("-%x-",frame[i]);
+    for (int i = 0; i < frame_len; i++)
+    {
+        printf("-%x-", frame[i]);
     }
 
     printf("\n\n\n");
     printf("emissor recebe: \n");
     while (curr_retransmition < numretransmitions && state_mach_tx != STOP)
+    {
+
+        write(fd, frame, frame_len);
+        // sendcontrol(A_TRANSMITTER, SET);
+        alarm(delay); // Set alarm to be triggered in 3s
+        alarmEnabled = TRUE;
+
+        // so volta aqui passado 3 segundos
+
+        while (alarmEnabled == TRUE && state_mach_tx != STOP)
         {
+            if (read(fd, &byte, 1) > 0)
+            {
+                printf("-%x-", byte);
 
-            write(fd,frame,frame_len);
-            //sendcontrol(A_TRANSMITTER, SET);
-            alarm(delay); // Set alarm to be triggered in 3s
-            alarmEnabled = TRUE;
-
-            //so volta aqui passado 3 segundos
-
-            while(alarmEnabled == TRUE && state_mach_tx != STOP){
-                if (read(fd,&byte,1) > 0){
-                    printf("-%x-",byte);
-
-                    switch (state_mach_tx)
+                switch (state_mach_tx)
                 {
                 case Start:
-                    if (byte == FLAG){ state_mach_tx = flag_rcv; }
-                    //else {state_mach_tx = Start;}
+                    if (byte == FLAG)
+                    {
+                        state_mach_tx = flag_rcv;
+                    }
+                    // else {state_mach_tx = Start;}
                     break;
                 case flag_rcv:
-                    if(byte == A_RECEIVER){ state_mach_tx = a_tx; }
-                    else if (byte == FLAG) { state_mach_tx = flag_rcv; }
-                    else {state_mach_tx = Start;}
+                    if (byte == A_RECEIVER)
+                    {
+                        state_mach_tx = a_tx;
+                    }
+                    else if (byte == FLAG)
+                    {
+                        state_mach_tx = flag_rcv;
+                    }
+                    else
+                    {
+                        state_mach_tx = Start;
+                    }
                     break;
-                case a_tx:                   //new
+                case a_tx: // new
                     byte_c = byte;
-                    if(byte == RR0 || byte == RR1){ state_mach_tx = c_tx;
+                    if (byte == RR0 || byte == RR1)
+                    {
+                        state_mach_tx = c_tx;
                         accepted = 1;
                         Ns = (Ns + 1) % 2;
                     }
-                    else if (byte == REJ0 || byte == REJ1){ state_mach_tx = c_tx;
+                    else if (byte == REJ0 || byte == REJ1)
+                    {
+                        state_mach_tx = c_tx;
                         rejected = 1;
                     }
-                    else if (byte == FLAG){ state_mach_tx = flag_rcv; }
-                    else {state_mach_tx = Start;}
+                    else if (byte == FLAG)
+                    {
+                        state_mach_tx = flag_rcv;
+                    }
+                    else
+                    {
+                        state_mach_tx = Start;
+                    }
                     break;
                 case c_tx:
-                    if(byte == (A_RECEIVER ^ byte_c)){ state_mach_tx = bcc_ok; }
-                    else if (byte == FLAG){ state_mach_tx = flag_rcv; }
-                    else {state_mach_tx = Start;}
+                    if (byte == (A_RECEIVER ^ byte_c))
+                    {
+                        state_mach_tx = bcc_ok;
+                    }
+                    else if (byte == FLAG)
+                    {
+                        state_mach_tx = flag_rcv;
+                    }
+                    else
+                    {
+                        state_mach_tx = Start;
+                    }
                     break;
                 case bcc_ok:
-                    if(byte == FLAG){ state_mach_tx = STOP; }
-                    else {state_mach_tx = Start;}
+                    if (byte == FLAG)
+                    {
+                        state_mach_tx = STOP;
+                    }
+                    else
+                    {
+                        state_mach_tx = Start;
+                    }
                     break;
                 default:
                     break;
                 }
-
-                }
-
             }
+        }
 
         alarm(0);
         curr_retransmition++;
-        if (rejected && state_mach_tx == STOP) {printf("rejected"); rejected = 0; state_mach_tx = Start; continue;}
-        if (accepted && state_mach_tx == STOP) {printf("accepted"); accepted = 0; break;}
+        if (rejected && state_mach_tx == STOP)
+        {
+            printf("rejected");
+            rejected = 0;
+            state_mach_tx = Start;
+            continue;
+        }
+        if (accepted && state_mach_tx == STOP)
+        {
+            printf("accepted");
+            break;
+        }
         rejected = 0;
         accepted = 0;
 
-        }//001  0 1010
+    } // 001  0 1010
 
-        alarmCount = 0;
-        free(frame);
+    alarmCount = 0;
+    printf("\n FRAME FREE \n");
+    free(frame);
 
-        if (accepted > 0) return frame_len;
-        else {
-            printf("\n not accepted \n");
-            //llclose(fd);
-            return -1;
-        }
+    if (accepted > 0)
+        return frame_len;
+    else
+    {
+        printf("\n not accepted \n");
+        // llclose(fd);
+        return -1;
+    }
 }
 
-
-
-//–fd:       identificador da ligação de dados –buffer: array de caracteres recebidos
-//return –array length (number of characters read) –negative value in case of error
-int llread(int fd, char * buffer){
-
-
+// –fd:       identificador da ligação de dados –buffer: array de caracteres recebidos
+// return –array length (number of characters read) –negative value in case of error
+int llread(int fd, char *buffer)
+{
 
     enum rec_status state_mach_rec = Start;
     unsigned char byte;
@@ -662,118 +712,164 @@ int llread(int fd, char * buffer){
     unsigned char b_byte;
 
     printf("\n\n STARING LLREAD: \n\n");
-    while(state_mach_rec != STOP){
-            if (read(fd, &byte, 1) > 0){
-                printf("-%x-",byte);
-                switch (state_mach_rec)
+    while (state_mach_rec != STOP)
+    {
+        printf("\n\nINSIDE READ WHILE:: \n\n");
+        if (read(fd, &byte, 1) > 0)
+        {
+            printf("-%x-", byte);
+            switch (state_mach_rec)
+            {
+            case Start:
+                if (byte == FLAG)
                 {
-                case Start:
-                    if (byte == FLAG){ state_mach_rec = flag_rcv; }
-                    //else {state_mach_rec = Start;}
-                    break;
-                case flag_rcv:
-                    if(byte == A_TRANSMITTER){ state_mach_rec = a_rcv; }
-                    else if (byte == FLAG) { state_mach_rec = flag_rcv; }
-                    else {state_mach_rec = Start;}
-                    break;
-                case a_rcv:
-                    if(byte == C_I(0) || byte == C_I(1)){ state_mach_rec = c_rcv; c_byte = byte;}
-                    else if (byte == C_DISC) { ////////////// aqui
-                        c_byte = C_DISC;
-                        state_mach_rec = c_rcv;
-                        printf(" \n FOI DETETADO NO READ ANTES \n");
-                    }
-                    else if (byte == UA){
-                        printf("\n\n /////UA RECEIVED /////\n\n");
-                        c_byte = UA;
-                        state_mach_rec = c_rcv;
-                    }
-                    else if (byte == FLAG){ state_mach_rec = flag_rcv; }
-                    else {state_mach_rec = Start;}
-                    break;
-                case c_rcv:
-                    if ( byte == (A_TRANSMITTER ^ c_byte) && c_byte == DISC){ state_mach_rec = bcc_ok; printf("\n está certo !!!!! \n");}
-                    else if ( byte == (A_TRANSMITTER ^ c_byte) && c_byte == UA) {state_mach_rec = bcc_ok; }
-
-                    else if( byte == (A_TRANSMITTER ^ c_byte)){ state_mach_rec = read_data; } //pode ler a informacao
-
-                    else if ( byte == FLAG){ state_mach_rec = flag_rcv; }
-                    else {state_mach_rec = Start;}
-                    break;
-
-
-                case read_data:
-                    if (byte == ESC) state_mach_rec = next_esc;
-                    else if (byte == FLAG){
-                        unsigned char bcc2 = buffer[i-1];
-
-                        buffer[--i] = '\0';
-
-                        printf("\n buffer está: \n");
-                        for (int z = 0; z < i; z++){
-                            printf("-%x-",buffer[z]);
-                        }
-
-                        unsigned char bcc_try = buffer[0];
-
-                        for (int j = 1; j < i; j++ ){
-                            bcc_try ^= buffer[j];
-                        }
-
-                        printf("recetor envia: \n");
-                        if (bcc_try == bcc2){
-                            state_mach_rec = STOP;
-                            sendcontrol(A_RECEIVER,C_RR(Nr));
-                            Nr = (Nr + 1) % 2;
-                            return i;
-                        }
-
-                        else {
-                            sendcontrol(A_RECEIVER, C_REJ(Nr));
-                            return -1;
-                        }
-
-                    }
-                    else {buffer[i++] = byte;}
-
-                    break;
-
-                case next_esc:
-                    printf("esc exception: %x\n",byte);
-                    state_mach_rec = read_data;
-                    if (byte == FLAG_R)
-                        buffer[i++] = FLAG;
-                    else if (byte == ESC_R)
-                        buffer[i++] = ESC;
-                    break;
-
-                case bcc_ok:
-                    printf("\nno bcc ok está: %x \n ",byte);
-                    if (byte == FLAG) {
-                        state_mach_rec = STOP;
-                    }
-
-                    break;
-
-
-                default:
-                    break;
+                    state_mach_rec = flag_rcv;
+                }
+                // else {state_mach_rec = Start;}
+                break;
+            case flag_rcv:
+                if (byte == A_TRANSMITTER)
+                {
+                    state_mach_rec = a_rcv;
+                }
+                else if (byte == FLAG)
+                {
+                    state_mach_rec = flag_rcv;
+                }
+                else
+                {
+                    state_mach_rec = Start;
+                }
+                break;
+            case a_rcv:
+                if (byte == C_I(0) || byte == C_I(1))
+                {
+                    state_mach_rec = c_rcv;
+                    c_byte = byte;
+                }
+                else if (byte == C_DISC)
+                { ////////////// aqui
+                    c_byte = C_DISC;
+                    state_mach_rec = c_rcv;
+                    printf(" \n FOI DETETADO NO READ ANTES \n");
+                }
+                else if (byte == UA)
+                {
+                    printf("\n\n /////UA RECEIVED /////\n\n");
+                    c_byte = UA;
+                    state_mach_rec = c_rcv;
+                }
+                else if (byte == FLAG)
+                {
+                    state_mach_rec = flag_rcv;
+                }
+                else
+                {
+                    state_mach_rec = Start;
+                }
+                break;
+            case c_rcv:
+                if (byte == (A_TRANSMITTER ^ c_byte) && c_byte == DISC)
+                {
+                    state_mach_rec = bcc_ok;
+                    printf("\n está certo !!!!! \n");
+                }
+                else if (byte == (A_TRANSMITTER ^ c_byte) && c_byte == UA)
+                {
+                    state_mach_rec = bcc_ok;
                 }
 
+                else if (byte == (A_TRANSMITTER ^ c_byte))
+                {
+                    state_mach_rec = read_data;
+                } // pode ler a informacao
+
+                else if (byte == FLAG)
+                {
+                    state_mach_rec = flag_rcv;
+                }
+                else
+                {
+                    state_mach_rec = Start;
+                }
+                break;
+
+            case read_data:
+                if (byte == ESC)
+                    state_mach_rec = next_esc;
+                else if (byte == FLAG)
+                {
+                    unsigned char bcc2 = buffer[i - 1];
+
+                    buffer[--i] = '\0';
+
+                    printf("\n buffer está: \n");
+                    for (int z = 0; z < i; z++)
+                    {
+                        printf("-%x-", buffer[z]);
+                    }
+
+                    unsigned char bcc_try = buffer[0];
+
+                    for (int j = 1; j < i; j++)
+                    {
+                        bcc_try ^= buffer[j];
+                    }
+
+                    printf("recetor envia: \n");
+                    if (bcc_try == bcc2)
+                    {
+                        state_mach_rec = STOP;
+                        sendcontrol(A_RECEIVER, C_RR(Nr));
+                        Nr = (Nr + 1) % 2;
+                        return i;
+                    }
+
+                    else
+                    {
+                        sendcontrol(A_RECEIVER, C_REJ(Nr));
+                        return -1;
+                    }
+                }
+                else
+                {
+                    buffer[i++] = byte;
+                }
+
+                break;
+
+            case next_esc:
+                printf("esc exception: %x\n", byte);
+                state_mach_rec = read_data;
+                if (byte == FLAG_R)
+                    buffer[i++] = FLAG;
+                else if (byte == ESC_R)
+                    buffer[i++] = ESC;
+                break;
+
+            case bcc_ok:
+                printf("\nno bcc ok está: %x \n ", byte);
+                if (byte == FLAG)
+                {
+                    state_mach_rec = STOP;
+                }
+
+                break;
+
+            default:
+                break;
             }
-
         }
+    }
 
+    if (c_byte == C_DISC)
+    {
+        printf("\n READ SENT DISC TO LLCLOSE \n");
+        sendcontrol(A_RECEIVER, C_DISC);
+    }
 
-
-        if (c_byte == C_DISC){
-            printf("\n READ SENT DISC TO LLCLOSE \n");
-            sendcontrol(A_RECEIVER, C_DISC);
-        }
-
-
-
-        if (c_byte == UA){
+    if (c_byte == UA)
+    {
 
         sleep(1);
 
@@ -785,65 +881,71 @@ int llread(int fd, char * buffer){
 
         printf("\n\n////////////CLOSING/////////////// \n\n");
         close(fd);
-
-        }
-
-
-
-
+    }
 
     return -1;
 }
 
-
 #define MAX_PAYLOAD_SIZE 40
 
-
-unsigned char * MakeCPacket(unsigned char control, char *filename, long int length, unsigned int *size){
-
-
-    int L1 = (int) ceil(log2f((float)length)/8.0);    //L1 numero de bytes necessário para representar o numero length em hexadecimal 
+unsigned char *MakeCPacket(unsigned char control, char *filename, long int length, unsigned int *size)
+{
+    printf("\nCHECKPOINT#5\n");
+    printf("\n LENGTH: %ld\n", length);
+    int L1 = (int)ceil(log2f((float)length) / 8.0); // L1 numero de bytes necessário para representar o numero length em hexadecimal
     int L2 = strlen(filename);
+    printf("\nSIZE_L1:%d\n", L1);
+    printf("\nSIZE_L2:%d\n", L2);
     int sizP = 1 + 2 + L1 + 2 + L2;
     *size = sizP;
-    unsigned char * packet = (unsigned char *) malloc(sizP);
-    
+    printf("\nSIZE_P:%d\n", sizP);
+    unsigned char *packet = (unsigned char *)malloc(sizP);
+    printf("\nCHECKPOINT#6\n");
+    packet[0] = 0;
+    printf("\nCHECKPOINT#6/0\n");
+    packet[1] = 0;
+    printf("\nCHECKPOINT#6/1\n");
+    packet[2] = 0;
+    printf("\nCHECKPOINT#6/2\n");
+    packet[3] = 0;
+    printf("\nCHECKPOINT#6/3\n");
+    packet[4] = 0;
+    printf("\nCHECKPOINT#6/4\n");
     int pos = 0;
     packet[pos++] = 2;
     packet[pos++] = 0;
     packet[pos++] = L1;
-    //2 length
 
-    for (int i = 0 ; i < L1 ; i++) {
-        packet[2+L1-i] = length & 0xFF;
+    // 2 length
+
+    for (int i = 0; i < L1; i++)
+    {
+        packet[2 + L1 - i] = length & 0xFF;
         length >>= 8;
     }
 
-    pos+=L1;
+    pos += L1;
 
-    packet[pos++]= 1;
+    packet[pos++] = 1;
 
-    packet[pos++]=L2;
-
-    
-    memcpy(packet+pos, filename, L2);
+    packet[pos++] = L2;
+    printf("\nCHECKPOINT#7\n");
+    memcpy(packet + pos, filename, L2);
     return packet;
 }
 
-
-unsigned char * MakeDPacket(unsigned char control, unsigned char *data, int length, unsigned int *size){
+unsigned char *MakeDPacket(unsigned char control, unsigned char *data, int length, unsigned int *size)
+{
     *size = 1 + 2 + length;
-    unsigned char* packet = (unsigned char*)malloc(*size);
+    unsigned char *packet = (unsigned char *)malloc(*size);
 
-
-    packet[0] = 1;   
+    packet[0] = 1;
     packet[1] = (length >> 8) & 0xFF;
     packet[2] = length & 0xFF;
-    memcpy(packet+3, data, length);
+    memcpy(packet + 3, data, length);
 
     return packet;
 }
-
 
 int main(int argc, char *argv[])
 {
@@ -858,198 +960,172 @@ int main(int argc, char *argv[])
         exit(1);
     }
 
-
     // unsigned char * delt = (unsigned char *) malloc(2);
     // delt[0] = 'a';
     // delt[1] = 'b';
 
     // printf("\n\n  %s \n\n",delt);
-    
 
     const char *serialPortName = argv[1];
     const char *status_ = argv[2];
     char *filename = "pinguim.gif";
 
-
     enum Status device = TRANSMITTER;
 
-    if (strcmp(status_, "recetor") == 0) {
+    if (strcmp(status_, "recetor") == 0)
+    {
         printf("\n\nMAIN STRCMP RECEIVER\n\n");
         device = RECEIVER;
     }
-    else if (strcmp(status_,"emissor") == 0){
+    else if (strcmp(status_, "emissor") == 0)
+    {
         printf("\n\nMAIN STRCMP TRANSMITTER\n\n");
         device = TRANSMITTER;
-   }
-
-
+    }
 
     int fd = llopen(serialPortName, device);
-        if (fd < 0) {
+    printf("\nCHECKPOINT#2\n");
+    if (fd < 0)
+    {
         perror("Connection error\n");
         exit(-1);
     }
-
+    printf("\nCHECKPOINT#3\n");
 
     switch (device)
     {
     case TRANSMITTER:
-        
-        FILE* file = fopen(filename, "rb");
-        if (file == NULL) {
+
+        FILE *file = fopen(filename, "rb");
+        if (file == NULL)
+        {
             perror("\nFile not found\n");
             exit(-1);
         }
-
 
         long int fileSize0 = ftell(file);
         fseek(file, 0L, SEEK_END);
         long int fileSize = ftell(file) - fileSize0;
         fseek(file, 0L, SEEK_SET);
-
         unsigned int Psize;
+        printf("\nFILE_SIZE: %ld \n", fileSize);
         unsigned char *controlPacketStart = MakeCPacket(2, filename, fileSize, &Psize);
+        printf("\nCHECKPOINT_AFTER_MAKE_PACKET\n");
 
-
-        if(llwrite(fd, controlPacketStart, Psize) == -1){ 
-                printf("Exit: error in start packet\n");
-                exit(-1);
+        if (llwrite(fd, controlPacketStart, Psize) == -1)
+        {
+            printf("Exit: error in start packet\n");
+            exit(-1);
         }
-
+        printf("\n PACKET_CONTROL FREE \n");
         free(controlPacketStart);
 
         unsigned char sequence = 0;
-        unsigned char* file_content = (unsigned char*) malloc(sizeof(unsigned char) * fileSize);
+        unsigned char *file_content = (unsigned char *)malloc(sizeof(unsigned char) * fileSize);
         fread(file_content, sizeof(unsigned char), fileSize, file);
         long int bytesLeft = fileSize;
 
-        //need to free file_content
+        // need to free file_content
 
+        while (bytesLeft >= 0)
+        {
 
+            int dataSize = bytesLeft > (long int)MAX_PAYLOAD_SIZE ? MAX_PAYLOAD_SIZE : bytesLeft;
+            unsigned char *data = (unsigned char *)malloc(dataSize);
+            // need to free data
+            memcpy(data, file_content, dataSize);
 
-        while (bytesLeft >= 0) { 
+            int packetSize;
+            unsigned char *packet = MakeDPacket(sequence, data, dataSize, &packetSize);
+            // need to free packet;
 
-                int dataSize = bytesLeft > (long int) MAX_PAYLOAD_SIZE ? MAX_PAYLOAD_SIZE : bytesLeft;
-                unsigned char* data = (unsigned char*) malloc(dataSize);
-                //need to free data
-                memcpy(data, file_content, dataSize);
-
-
-
-                int packetSize;
-                unsigned char* packet = MakeDPacket(sequence, data, dataSize, &packetSize);
-                //need to free packet;
-                
-                if(llwrite(fd, packet, packetSize) == -1) {
-                    printf("Exit: error in data packets\n");
-                    exit(-1);
-                }
-                
-                bytesLeft -= (long int) MAX_PAYLOAD_SIZE; 
-                file_content += dataSize; 
-                //sequence = (sequence + 1) % 255;   
+            if (llwrite(fd, packet, packetSize) == -1)
+            {
+                printf("Exit: error in data packets\n");
+                exit(-1);
             }
 
+            bytesLeft -= (long int)MAX_PAYLOAD_SIZE;
+            file_content += dataSize;
+            // sequence = (sequence + 1) % 255;
+        }
 
-            unsigned int Psize2;
-            unsigned char *controlPacketEnd = MakeCPacket(2, filename, fileSize, &Psize2);
+        unsigned int Psize2;
+        unsigned char *controlPacketEnd = MakeCPacket(2, filename, fileSize, &Psize2);
 
+        if (llwrite(fd, controlPacketEnd, Psize2) == -1)
+        {
+            printf("Exit: error in exit packet\n");
+            exit(-1);
+        }
 
-            if(llwrite(fd, controlPacketEnd, Psize2) == -1){ 
-                    printf("Exit: error in exit packet\n");
-                    exit(-1);
-            }
-
-            llclose(fd);
-
+        llclose(fd);
 
         break;
 
-
     case RECEIVER:
-
-        unsigned char *packet_r = (unsigned char *) malloc(MAX_PAYLOAD_SIZE);
+        printf("\n\nRECEIVER#1\n\n");
+        unsigned char *packet_r = (unsigned char *)malloc(MAX_PAYLOAD_SIZE);
         int packet_rSize = 0;
-        while ((packet_rSize = llread(fd, packet_r)) < 0);
+        while ((packet_rSize = llread(fd, packet_r)) < 0)
+            ;
 
         unsigned long int newFileSize = 0;
 
-        //processar o packet recebido
+        // processar o packet recebido
 
         unsigned char FileSize_NBytes = packet_r[2];
-        
-        //unsigned char aux[FileSize_NBytes];
-        unsigned char *aux = (unsigned char *) malloc(FileSize_NBytes);
 
+        // unsigned char aux[FileSize_NBytes];
+        unsigned char *aux = (unsigned char *)malloc(FileSize_NBytes);
 
         memcpy(aux, packet_r + 3, FileSize_NBytes);
+        printf("\n\nRECEIVER#2\n\n");
+        for (unsigned int i = 0; i < FileSize_NBytes; i++)
+            newFileSize |= (aux[FileSize_NBytes - i - 1] << (8 * i));
+        // tamanho feito
 
-
-        for(unsigned int i = 0; i < FileSize_NBytes; i++)
-        newFileSize |= (aux[FileSize_NBytes-i-1] << (8*i));
-        //tamanho feito
-
-
-        unsigned char Name_NBytes = packet_r[3+FileSize_NBytes+1];
-        unsigned char* nome;
+        unsigned char Name_NBytes = packet_r[3 + FileSize_NBytes + 1];
+        unsigned char *nome = (unsigned char *)malloc(Name_NBytes + 9);
         memcpy(nome, packet_r + 3 + FileSize_NBytes + 2, Name_NBytes);
-        //nome feito
+        memcpy(nome + Name_NBytes - 4, "_novo.gif", 9);
+        printf("\nNOME:%s\n", nome);
+        // nome feito
 
+        FILE *newFile = fopen((char *)nome, "wb+");
+        printf("\n\nRECEIVER#3\n\n");
+        // continuar
+        // a partir daqui
+        while (1)
+        {
+            printf("\n\nRECEIVER WHILE\n\n");
+            while ((packet_rSize = llread(fd, packet_r)) < 0)
+            {
+            }
+            if (packet_rSize == 0)
+                break;
+            else if (packet_r[0] != 3)
+            {
+                unsigned char *buffer = (unsigned char *)malloc(packet_rSize);
 
-
-        FILE* newFile = fopen((char *) nome, "wb+");
-
-        //continuar
-        //a partir daqui
-        while (1) {    
-                while ((packet_rSize = llread(fd, packet_r)) < 0);
-                if(packet_rSize == 0) break;
-                else if(packet_r[0] != 3){
-                    unsigned char *buffer = (unsigned char*)malloc(packet_rSize);
-
-                    memcpy(buffer, packet_r + 4, packet_rSize - 4);
-                    buffer += packet_rSize + 4;
-
-                    fwrite(buffer, sizeof(unsigned char), packet_rSize-4, newFile);
-                    free(buffer);
-                }
-                else continue;
+                memcpy(buffer, packet_r + 4, packet_rSize - 4);
+                buffer += packet_rSize + 4;
+                
+                fwrite(buffer, sizeof(unsigned char), packet_rSize - 4, newFile);
+                printf("\n BUFFER FREE \n");
+                free(buffer - packet_rSize - 4);
+            }
+            else
+                continue;
         }
-
 
         fclose(newFile);
         break;
 
-
-
-
-    
     default:
         exit(-1);
         break;
-
     }
-
-
-
-
-
+    printf("\nCHECKPOINT##\n");
     return 0;
-
-
-
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
