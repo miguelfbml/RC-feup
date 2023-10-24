@@ -1,0 +1,27 @@
+.vscode
+# Ignore compiled executables
+*.exe
+*.out
+*.app
+*.com
+
+# Ignore binary files
+*.bin
+*.dll
+*.so
+
+# Ignore compiled bytecode
+*.class
+
+# Ignore script executables
+*.sh
+*.bash
+*.zsh
+
+# Ignore compiled object files
+*.o
+*.obj
+
+# Ignore JAR and WAR files
+*.jar
+*.war
