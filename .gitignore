@@ -1,4 +1,13 @@
-.vscode
+# Ignore all
+*
+
+# Unignore all with extensions
+!*.*
+
+# Unignore all dirs
+!*/
+
+
 # Ignore compiled executables
 *.exe
 *.out
@@ -25,3 +34,5 @@
 # Ignore JAR and WAR files
 *.jar
 *.war
+
+.vscode
