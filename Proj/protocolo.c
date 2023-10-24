@@ -1,3 +1,4 @@
+
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -6,6 +7,7 @@
 #include <sys/stat.h>
 #include <termios.h>
 #include <unistd.h>
+#include <math.h>
 
 #include <signal.h>
 #include <stdio.h>
@@ -803,16 +805,64 @@ int llread(int fd, char * buffer){
 
 
 
+#define MAX_PAYLOAD_SIZE 40
+
+
+unsigned char * MakeCPacket(unsigned char control, char *filename, long int length, unsigned int *size){
+
+
+    int L1 = (int) ceil(log2f((float)length)/8.0);    //L1 numero de bytes necessário para representar o numero length em hexadecimal 
+    int L2 = strlen(filename);
+    int sizP = 1 + 2 + L1 + 2 + L2;
+    *size = sizP;
+    unsigned char * packet = (unsigned char *) malloc(sizP);
+    
+    int pos = 0;
+    packet[pos++] = 2;
+    packet[pos++] = 0;
+    packet[pos++] = L1;
+    
+
+    for (int i = 0 ; i < L1 ; i++) {
+        packet[2+L1-i] = length & 0xFF;
+        length >>= 8;
+    }
+
+    pos+=L1;
+
+    packet[pos++]= 1;
+
+    packet[pos++]=L2;
+
+    memcpy(packet+pos, filename, L2);
+    return packet;
+}
+
+
+
+unsigned char * MakeDPacket(unsigned char control, unsigned char *data, int length, unsigned int *size){
+    *size = 1 + 2 + length;
+    unsigned char* packet = (unsigned char*)malloc(*size);
+
+
+    packet[0] = 1;   
+    packet[1] = (length >> 8) & 0xFF;
+    packet[2] = length & 0xFF;
+    memcpy(packet+3, data, length);
+
+    return packet;
+}
 
 
 
 
 
+int main(int argc, char *argv[])
+{
 
 
 
 
-int main(int argc, char *argv[]){
     if (argc < 3)
     {
         printf("Incorrect program usage\n"
@@ -824,10 +874,12 @@ int main(int argc, char *argv[]){
     }
 
 
-
+    
 
     const char *serialPortName = argv[1];
     const char *status_ = argv[2];
+    char *filename = "pinguim.gif";
+
 
     enum Status teste = TRANSMITER;
 
@@ -840,100 +892,175 @@ int main(int argc, char *argv[]){
         teste = TRANSMITER;
    }
 
-    //setup(serialPortName);
 
 
-
-    printf("%i",llopen(serialPortName, teste));
-
-    sleep(1);
-
-
-    if (teste == TRANSMITER){
-        sleep(1);
-        unsigned char buf[11] = {0x00, 0x00, 0x7e, 0x7e, 0x00, 0x7e, 0x7e, 0x7e , 0x00, 0x00, 0x00};
-        unsigned char* buf_point = buf;
-        //llwrite(fd,buf_point,5);
-
-
-        llwrite(fd,buf_point,10);
-        int n = 10 ;
-        while (n>0)
-        {
-            buf_point++;
-            n--;
-        }
-        llwrite(fd,buf_point,1);
-
-        llclose(fd);
-        printf("\n\nLLCLOSE DONE\n\n");
-        sleep(1);
-        sendcontrol(A_TRANSMITER, UA);
-
-
-
+    int fd = llopen(serialPortName, teste);
+        if (fd < 0) {
+        perror("Connection error\n");
+        exit(-1);
     }
 
-    int byte = 0;
 
-    unsigned char buff_received[] = {0};
-    unsigned char* buff_received_point = buff_received;
-    if (teste == RECEIVER){
-
-        llread(fd, buff_received_point);
-        int n = 10 ;
-        while (n>0)
-        {
-            buff_received_point++;
-            n--;
-        }
-        llread(fd, buff_received_point);
-        //buff_received_point++;
-        //buff_received_point++;
-        printf("\n\n3RD READ\n\n");
-        llread(fd, buff_received_point);
-        printf("\n\n4TH READ\n\n");
-        llread(fd, buff_received_point);
-
-
-
-
-        /*
-        llread(fd, buff_received_point);
-        buff_received_point++;
-        buff_received_point++;
-        buff_received_point++;
-        llread(fd, buff_received_point);
-        */
-
-    /*
-    while(true){
-        //printf("\nchega ao while true\n");
-        if (read(fd,&byte,1) > 0){
-        printf("0x:%x", byte);
-        }
-
-    }
-    */
-    printf("\n o buffer ficou com \n");
-    for (int i = 0; i < 11; i++)
+    switch (teste)
     {
-        printf("-%x-", buff_received[i]);
+    case TRANSMITER:
+        
+        FILE* file = fopen(filename, "rb");
+        if (file == NULL) {
+            perror("File not found\n");
+            exit(-1);
+        }
+
+
+        long int fileSize0 = ftell(file);
+        fseek(file, 0L, SEEK_END);
+        long int fileSize = ftell(file) - fileSize0;
+        fseek(file, 0L, SEEK_SET);
+
+        unsigned int Psize;
+        unsigned char *controlPacketStart = MakeCPacket(2, filename, fileSize, &Psize);
+
+
+        if(llwrite(fd, controlPacketStart, Psize) == -1){ 
+                printf("Exit: error in start packet\n");
+                exit(-1);
+        }
+
+        free(controlPacketStart);
+
+        unsigned char sequence = 0;
+        unsigned char* file_content = (unsigned char*) malloc(sizeof(unsigned char) * fileSize);
+        fread(file_content, sizeof(unsigned char), fileSize, file);
+        long int bytesLeft = fileSize;
+
+        //need to free file_content
+
+
+
+        while (bytesLeft >= 0) { 
+
+                int dataSize = bytesLeft > (long int) MAX_PAYLOAD_SIZE ? MAX_PAYLOAD_SIZE : bytesLeft;
+                unsigned char* data = (unsigned char*) malloc(dataSize);
+                //need to free data
+                memcpy(data, file_content, dataSize);
+
+
+
+                int packetSize;
+                unsigned char* packet = MakeDPacket(sequence, data, dataSize, &packetSize);
+                //need to free packet;
+                
+                if(llwrite(fd, packet, packetSize) == -1) {
+                    printf("Exit: error in data packets\n");
+                    exit(-1);
+                }
+                
+                bytesLeft -= (long int) MAX_PAYLOAD_SIZE; 
+                file_content += dataSize; 
+                //sequence = (sequence + 1) % 255;   
+            }
+
+
+            unsigned int Psize2;
+            unsigned char *controlPacketEnd = MakeCPacket(2, filename, fileSize, &Psize2);
+
+
+            if(llwrite(fd, controlPacketEnd, Psize2) == -1){ 
+                    printf("Exit: error in exit packet\n");
+                    exit(-1);
+            }
+
+            llclose(fd);
+
+
+        break;
+
+
+    case RECEIVER:
+
+        unsigned char *packet_r = (unsigned char *) malloc(MAX_PAYLOAD_SIZE);
+        int packet_rSize = 0;
+        while ((packet_rSize = llread(fd, packet_r)) < 0);
+
+        unsigned long int newFileSize = 0;
+
+        //processar o packet recebido
+
+        unsigned char FileSize_NBytes = packet_r[2];
+        
+        //unsigned char aux[FileSize_NBytes];
+        unsigned char *aux = (unsigned char *) malloc(FileSize_NBytes);
+
+
+        memcpy(aux, packet_r + 3, FileSize_NBytes);
+
+
+        for(unsigned int i = 0; i < FileSize_NBytes; i++)
+        newFileSize |= (aux[FileSize_NBytes-i-1] << (8*i));
+        //tamanho feito
+
+
+        unsigned char Name_NBytes = packet_r[3+FileSize_NBytes+1];
+        unsigned char* nome;
+        memcpy(nome, packet_r + 3 + FileSize_NBytes + 2, Name_NBytes);
+        //nome feito
+
+
+        memcpy(nome + Name_NBytes, "_Novo", 5);
+
+        FILE* newFile = fopen((char *) nome, "wb+");
+
+        //continuar
+        //a partir daqui
+        while (1) {    
+                while ((packet_rSize = llread(fd, packet_r)) < 0);
+                if(packet_rSize == 0) break;
+                else if(packet_r[0] != 3){
+                    unsigned char *buffer = (unsigned char*)malloc(packet_rSize);
+
+                    memcpy(buffer, packet_r + 4, packet_rSize - 4);
+                    buffer += packet_rSize + 4;
+
+                    fwrite(buffer, sizeof(unsigned char), packet_rSize-4, newFile);
+                    free(buffer);
+                }
+                else continue;
+        }
+
+
+        fclose(newFile);
+        break;
+
+
+
+
+    
+    default:
+        exit(-1);
+        break;
+
     }
+
+
+
+
+
+    return 0;
+
+
+
 }
 
-/*
-sleep(1);
 
 
-if (tcsetattr(fd, TCSANOW, &oldtio) == -1)
-{
-    perror("tcsetattr");
-    exit(-1);
-}
 
-close(fd);
-*/
 
-return 0;
-}
+
+
+
+
+
+
+
+
+
