@@ -34,6 +34,8 @@
 #define DISC 0x0B
 #define INFORMATION_FRAME0 0x00
 #define INFORMATION_FRAME1 0x0B
+#define MAX_PAYLOAD_SIZE 40
+
 
 // ruben
 
@@ -711,10 +713,10 @@ int llread(int fd, char *buffer)
 
     unsigned char b_byte;
 
-    printf("\n\n STARING LLREAD: \n\n");
+    printf("\n\n STARTING LLREAD: \n\n");
     while (state_mach_rec != STOP)
     {
-        printf("\n\nINSIDE READ WHILE:: \n\n");
+        //printf("\n\nINSIDE READ WHILE:: \n\n");
         if (read(fd, &byte, 1) > 0)
         {
             printf("-%x-", byte);
@@ -880,13 +882,15 @@ int llread(int fd, char *buffer)
         }
 
         printf("\n\n////////////CLOSING/////////////// \n\n");
+        sleep(2);
         close(fd);
+        return 0;
     }
 
     return -1;
 }
 
-#define MAX_PAYLOAD_SIZE 40
+//#define MAX_PAYLOAD_SIZE 40
 
 unsigned char *MakeCPacket(unsigned char control, char *filename, long int length, unsigned int *size)
 {
@@ -900,19 +904,8 @@ unsigned char *MakeCPacket(unsigned char control, char *filename, long int lengt
     *size = sizP;
     printf("\nSIZE_P:%d\n", sizP);
     unsigned char *packet = (unsigned char *)malloc(sizP);
-    printf("\nCHECKPOINT#6\n");
-    packet[0] = 0;
-    printf("\nCHECKPOINT#6/0\n");
-    packet[1] = 0;
-    printf("\nCHECKPOINT#6/1\n");
-    packet[2] = 0;
-    printf("\nCHECKPOINT#6/2\n");
-    packet[3] = 0;
-    printf("\nCHECKPOINT#6/3\n");
-    packet[4] = 0;
-    printf("\nCHECKPOINT#6/4\n");
     int pos = 0;
-    packet[pos++] = 2;
+    packet[pos++] = control;
     packet[pos++] = 0;
     packet[pos++] = L1;
 
@@ -1010,13 +1003,15 @@ int main(int argc, char *argv[])
         unsigned int Psize;
         printf("\nFILE_SIZE: %ld \n", fileSize);
         unsigned char *controlPacketStart = MakeCPacket(2, filename, fileSize, &Psize);
-        printf("\nCHECKPOINT_AFTER_MAKE_PACKET\n");
+        printf("\n//////////\n//////////\n//////////\nPACKET START WILL WRITE\n//////////\n//////////\n//////////");
+        sleep(3);
 
         if (llwrite(fd, controlPacketStart, Psize) == -1)
         {
             printf("Exit: error in start packet\n");
             exit(-1);
         }
+        sleep(3);
         printf("\n PACKET_CONTROL FREE \n");
         free(controlPacketStart);
 
@@ -1044,21 +1039,22 @@ int main(int argc, char *argv[])
                 printf("Exit: error in data packets\n");
                 exit(-1);
             }
-
+            sleep(3);
             bytesLeft -= (long int)MAX_PAYLOAD_SIZE;
             file_content += dataSize;
             // sequence = (sequence + 1) % 255;
         }
 
         unsigned int Psize2;
-        unsigned char *controlPacketEnd = MakeCPacket(2, filename, fileSize, &Psize2);
-
+        unsigned char *controlPacketEnd = MakeCPacket(3, filename, fileSize, &Psize2);
+        printf("\n//////////\n//////////\n//////////\nPACKET END WILL WRITE\n//////////\n//////////\n//////////");
+        sleep(5);
         if (llwrite(fd, controlPacketEnd, Psize2) == -1)
         {
             printf("Exit: error in exit packet\n");
             exit(-1);
         }
-
+        sleep(5);
         llclose(fd);
 
         break;
@@ -1069,7 +1065,7 @@ int main(int argc, char *argv[])
         int packet_rSize = 0;
         while ((packet_rSize = llread(fd, packet_r)) < 0)
             ;
-
+        printf("\nAAAAAAAAAAAAAA\nAAAAAAAAAAA\nAAAAAAAAAAAAAA\n->CONTROL PACKET: %d\n", packet_r[0]);
         unsigned long int newFileSize = 0;
 
         // processar o packet recebido
@@ -1094,29 +1090,37 @@ int main(int argc, char *argv[])
 
         FILE *newFile = fopen((char *)nome, "wb+");
         printf("\n\nRECEIVER#3\n\n");
-        // continuar
-        // a partir daqui
+
         while (1)
         {
-            printf("\n\nRECEIVER WHILE\n\n");
+
+            // stuck
             while ((packet_rSize = llread(fd, packet_r)) < 0)
             {
             }
-            if (packet_rSize == 0)
+            //printf("\nREAD PACKET\n");
+            printf("\n//////////\n//////////\n//////////\nPACKET 0: %d\n//////////\n//////////\n//////////", packet_r[0]);
+            if (packet_rSize == 0){
+                printf("Packet size is 0\n");
                 break;
+            }
             else if (packet_r[0] != 3)
             {
                 unsigned char *buffer = (unsigned char *)malloc(packet_rSize);
 
                 memcpy(buffer, packet_r + 4, packet_rSize - 4);
                 buffer += packet_rSize + 4;
-                
+
                 fwrite(buffer, sizeof(unsigned char), packet_rSize - 4, newFile);
                 printf("\n BUFFER FREE \n");
                 free(buffer - packet_rSize - 4);
             }
             else
+            {
+                printf("\n//////////\n//////////\n//////////\nBREAK PACKET %d\n//////////\n//////////\n//////////", packet_r[0]);
+                printf("\n\nRECEIVER WHILE\n\n");
                 continue;
+            }
         }
 
         fclose(newFile);
