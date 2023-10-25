@@ -1040,6 +1040,7 @@ int main(int argc, unsigned char *argv[])
                 exit(-1);
             }
             //sleep(1);
+            
             bytesLeft -= (long int)MAX_PAYLOAD_SIZE;
             file_content += dataSize;
             // sequence = (sequence + 1) % 255;
@@ -1108,12 +1109,12 @@ int main(int argc, unsigned char *argv[])
             {
                 unsigned char *buffer = (unsigned char *)malloc(packet_rSize);
 
-                memcpy(buffer, packet_r + 4, packet_rSize - 4);
-                buffer += packet_rSize + 4;
-
-                fwrite(buffer, sizeof(unsigned char), packet_rSize - 4, newFile);
+                memcpy(buffer, packet_r + 3, packet_rSize - 3);
+                //buffer += packet_rSize + 4;
+                
+                fwrite(buffer, sizeof(unsigned char), packet_rSize - 3, newFile);
                 printf("\n BUFFER FREE \n");
-                free(buffer - packet_rSize - 4);
+                free(buffer);
             }
             else
             {
