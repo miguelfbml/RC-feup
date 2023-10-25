@@ -109,7 +109,7 @@ int sendcontrol(unsigned char frame2, unsigned char frame3)
     return 0;
 }
 
-int setup(const char *serialPortName)
+int setup(const unsigned char *serialPortName)
 {
     fd = open(serialPortName, O_RDWR | O_NOCTTY);
 
@@ -135,11 +135,11 @@ int setup(const char *serialPortName)
 
     // Set input mode (non-canonical, no echo,...)
     newtio.c_lflag = 0;
-    newtio.c_cc[VTIME] = 5; // Inter-character timer unused
-    newtio.c_cc[VMIN] = 0;  // Blocking read until 5 chars received
+    newtio.c_cc[VTIME] = 5; // Inter-unsigned character timer unused
+    newtio.c_cc[VMIN] = 0;  // Blocking read until 5 unsigned chars received
 
     // VTIME e VMIN should be changed in order to protect with a
-    // timeout the reception of the following character(sCLOC)
+    // timeout the reception of the following unsigned character(sCLOC)
 
     // Now clean the line and activate the settings for the port
     // tcflush() discards data written to the object referred to
@@ -159,7 +159,7 @@ int setup(const char *serialPortName)
     return 0;
 }
 
-int llopen(const char *porta, enum Status status)
+int llopen(const unsigned char *porta, enum Status status)
 {
 
     printf("\n\n LLOPEN status %i \n\n", status);
@@ -471,12 +471,12 @@ int llclose(int fd)
     return 0;
 }
 
-// return –number of writer characters –negative value in case of error
-int llwrite(int fd, char *buffer, int length)
+// return –number of writer unsigned characters –negative value in case of error
+int llwrite(int fd, unsigned char *buffer, int length)
 {
     int frame_len = length + 6;
 
-    unsigned char *frame = (unsigned char *)malloc(frame_len * sizeof(char));
+    unsigned char *frame = (unsigned char *)malloc(frame_len * sizeof(unsigned char));
 
     frame[0] = FLAG;
     frame[1] = A_TRANSMITTER;
@@ -701,8 +701,8 @@ int llwrite(int fd, char *buffer, int length)
 }
 
 // –fd:       identificador da ligação de dados –buffer: array de caracteres recebidos
-// return –array length (number of characters read) –negative value in case of error
-int llread(int fd, char *buffer)
+// return –array length (number of unsigned characters read) –negative value in case of error
+int llread(int fd, unsigned char *buffer)
 {
 
     enum rec_status state_mach_rec = Start;
@@ -892,7 +892,7 @@ int llread(int fd, char *buffer)
 
 //#define MAX_PAYLOAD_SIZE 40
 
-unsigned char *MakeCPacket(unsigned char control, char *filename, long int length, unsigned int *size)
+unsigned char *MakeCPacket(unsigned char control, unsigned char *filename, long int length, unsigned int *size)
 {
     printf("\nCHECKPOINT#5\n");
     printf("\n LENGTH: %ld\n", length);
@@ -940,7 +940,7 @@ unsigned char *MakeDPacket(unsigned char control, unsigned char *data, int lengt
     return packet;
 }
 
-int main(int argc, char *argv[])
+int main(int argc, unsigned char *argv[])
 {
 
     if (argc < 3)
@@ -959,9 +959,9 @@ int main(int argc, char *argv[])
 
     // printf("\n\n  %s \n\n",delt);
 
-    const char *serialPortName = argv[1];
-    const char *status_ = argv[2];
-    char *filename = "pinguim.gif";
+    const unsigned char *serialPortName = argv[1];
+    const unsigned char *status_ = argv[2];
+    unsigned char *filename = "pinguim.gif";
 
     enum Status device = TRANSMITTER;
 
@@ -1039,7 +1039,7 @@ int main(int argc, char *argv[])
                 printf("Exit: error in data packets\n");
                 exit(-1);
             }
-            sleep(3);
+            //sleep(1);
             bytesLeft -= (long int)MAX_PAYLOAD_SIZE;
             file_content += dataSize;
             // sequence = (sequence + 1) % 255;
@@ -1088,7 +1088,7 @@ int main(int argc, char *argv[])
         printf("\nNOME:%s\n", nome);
         // nome feito
 
-        FILE *newFile = fopen((char *)nome, "wb+");
+        FILE *newFile = fopen((unsigned char *)nome, "wb+");
         printf("\n\nRECEIVER#3\n\n");
 
         while (1)
