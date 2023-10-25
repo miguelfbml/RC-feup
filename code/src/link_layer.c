@@ -15,7 +15,6 @@
 
 #include <stdbool.h>
 
-#define BAUDRATE B38400
 #define _POSIX_SOURCE 1 // POSIX compliant source
 
 #define FALSE 0
@@ -35,12 +34,9 @@
 #define DISC 0x0B
 #define INFORMATION_FRAME0 0x00
 #define INFORMATION_FRAME1 0x0B
-#define MAX_PAYLOAD_SIZE 40
 
 
-// ruben
 
-// ruben 2
 
 #define C_I(Ns) (Ns << 6)
 
@@ -81,6 +77,10 @@ enum Status
     TRANSMITTER
 };
 
+
+
+
+
 int delay = 3;
 int numretransmitions = 3;
 
@@ -92,6 +92,7 @@ int alarmCount = 0;
 int Ns = 0;
 int Nr = 1;
 
+long int baudrate = 0;
 
 struct termios oldtio;
 struct termios newtio;
@@ -127,54 +128,6 @@ int sendcontrol(unsigned char frame2, unsigned char frame3)
 }
 
 
-unsigned char *MakeDPacket(unsigned char control, unsigned char *data, int length, unsigned int *size)
-{
-    *size = 1 + 2 + length;
-    unsigned char *packet = (unsigned char *)malloc(*size);
-
-    packet[0] = 1;
-    packet[1] = (length >> 8) & 0xFF;
-    packet[2] = length & 0xFF;
-    memcpy(packet + 3, data, length);
-
-    return packet;
-}
-
-unsigned char *MakeCPacket(unsigned char control, unsigned char *filename, long int length, unsigned int *size)
-{
-    printf("\nCHECKPOINT#5\n");
-    printf("\n LENGTH: %ld\n", length);
-    int L1 = (int)ceil(log2f((float)length) / 8.0); // L1 numero de bytes necessário para representar o numero length em hexadecimal
-    int L2 = strlen(filename);
-    printf("\nSIZE_L1:%d\n", L1);
-    printf("\nSIZE_L2:%d\n", L2);
-    int sizP = 1 + 2 + L1 + 2 + L2;
-    *size = sizP;
-    printf("\nSIZE_P:%d\n", sizP);
-    unsigned char *packet = (unsigned char *)malloc(sizP);
-    int pos = 0;
-    packet[pos++] = control;
-    packet[pos++] = 0;
-    packet[pos++] = L1;
-
-    // 2 length
-
-    for (int i = 0; i < L1; i++)
-    {
-        packet[2 + L1 - i] = length & 0xFF;
-        length >>= 8;
-    }
-
-    pos += L1;
-
-    packet[pos++] = 1;
-
-    packet[pos++] = L2;
-    printf("\nCHECKPOINT#7\n");
-    memcpy(packet + pos, filename, L2);
-    return packet;
-}
-
 int setup(const unsigned char *serialPortName)
 {
     fd = open(serialPortName, O_RDWR | O_NOCTTY);
@@ -195,7 +148,7 @@ int setup(const unsigned char *serialPortName)
     // Clear struct for new port settings
     memset(&newtio, 0, sizeof(newtio));
 
-    newtio.c_cflag = BAUDRATE | CS8 | CLOCAL | CREAD;
+    newtio.c_cflag = baudrate | CS8 | CLOCAL | CREAD;
     newtio.c_iflag = IGNPAR;
     newtio.c_oflag = 0;
 
@@ -225,23 +178,28 @@ int setup(const unsigned char *serialPortName)
     return 0;
 }
 
-int llopen(const unsigned char *porta, enum Status status)
+int llopen(LinkLayer connectionPar)
 {
 
-    printf("\n\n LLOPEN status %i \n\n", status);
+    delay = connectionPar.timeout;
+    numretransmitions = connectionPar.timeout;
+    baudrate = connectionPar.baudRate;
 
-    if (setup(porta) < 0)
+
+
+
+
+    if (setup(connectionPar.serialPort) < 0)
         return -1;
 
     enum rec_status state_mach_rec = Start;
 
     unsigned char byte = 0;
-    bool pr = (status == RECEIVER);
-    printf("\n bool:%i \n", pr);
+    
 
-    switch (status)
+    switch (connectionPar.role)
     {
-    case RECEIVER:
+    case LlRx:
         printf("\n\nentrou recetor LLOPEN\n\n");
 
         while (state_mach_rec != STOP)
@@ -320,7 +278,7 @@ int llopen(const unsigned char *porta, enum Status status)
         sendcontrol(A_RECEIVER, UA);
         break;
 
-    case TRANSMITTER:
+    case LlTx:
         printf("\n\n Entrou trasmiter LLOPEN \n\n");
         /* code */
         (void)signal(SIGALRM, alarmHandler);
@@ -447,7 +405,7 @@ int llopen(const unsigned char *porta, enum Status status)
 
 
 
-int llwrite(int fd, unsigned char *buffer, int length)
+int llwrite(const unsigned char *buffer, int length)
 {
     int frame_len = length + 6;
 
@@ -690,7 +648,7 @@ int llwrite(int fd, unsigned char *buffer, int length)
 
 
 
-int llread(int fd, unsigned char *buffer)
+int llread(unsigned char *buffer)
 {
 
     enum rec_status state_mach_rec = Start;
@@ -699,7 +657,6 @@ int llread(int fd, unsigned char *buffer)
 
     int i = 0;
 
-    unsigned char b_byte;
 
     printf("\n\n STARTING LLREAD: \n\n");
     while (state_mach_rec != STOP)

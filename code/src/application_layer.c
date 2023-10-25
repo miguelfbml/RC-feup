@@ -1,10 +1,78 @@
 // Application layer protocol implementation
 
 #include "application_layer.h"
+#include "link_layer.h"
+#include <stdio.h>
+#include <stdlib.h>
+
+enum Status
+{
+    RECEIVER,
+    TRANSMITTER
+};
+
+
+unsigned char *MakeDPacket(unsigned char control, unsigned char *data, int length, unsigned int *size)
+{
+    *size = 1 + 2 + length;
+    unsigned char *packet = (unsigned char *)malloc(*size);
+
+    packet[0] = 1;
+    packet[1] = (length >> 8) & 0xFF;
+    packet[2] = length & 0xFF;
+    memcpy(packet + 3, data, length);
+
+    return packet;
+}
+
+unsigned char *MakeCPacket(unsigned char control, unsigned char *filename, long int length, unsigned int *size)
+{
+    printf("\nCHECKPOINT#5\n");
+    printf("\n LENGTH: %ld\n", length);
+    int L1 = (int)ceil(log2f((float)length) / 8.0); // L1 numero de bytes necessário para representar o numero length em hexadecimal
+    int L2 = strlen(filename);
+    printf("\nSIZE_L1:%d\n", L1);
+    printf("\nSIZE_L2:%d\n", L2);
+    int sizP = 1 + 2 + L1 + 2 + L2;
+    *size = sizP;
+    printf("\nSIZE_P:%d\n", sizP);
+    unsigned char *packet = (unsigned char *)malloc(sizP);
+    int pos = 0;
+    packet[pos++] = control;
+    packet[pos++] = 0;
+    packet[pos++] = L1;
+
+    // 2 length
+
+    for (int i = 0; i < L1; i++)
+    {
+        packet[2 + L1 - i] = length & 0xFF;
+        length >>= 8;
+    }
+
+    pos += L1;
+
+    packet[pos++] = 1;
+
+    packet[pos++] = L2;
+    printf("\nCHECKPOINT#7\n");
+    memcpy(packet + pos, filename, L2);
+    return packet;
+}
+
 
 void applicationLayer(const char *serialPort, const char *role, int baudRate,
                       int nTries, int timeout, const char *filename)
 {
+
+
+    LinkLayer linkLayer;
+    strcpy(linkLayer.serialPort,serialPort);
+    linkLayer.role = strcmp(role, "tx") ? LlRx : LlTx;
+    linkLayer.baudRate = baudRate;
+    linkLayer.nRetransmissions = nTries;
+    linkLayer.timeout = timeout;
+
 
     enum Status device = TRANSMITTER;
 
@@ -13,13 +81,13 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
         printf("\n\nMAIN STRCMP RECEIVER\n\n");
         device = RECEIVER;
     }
-    else if (strcmp(status_, "rx") == 0)
+    else if (strcmp(role, "rx") == 0)
     {
         printf("\n\nMAIN STRCMP TRANSMITTER\n\n");
         device = TRANSMITTER;
     }
 
-    int fd = llopen(serialPortName, device);
+    int fd = llopen(linkLayer);
     printf("\nCHECKPOINT#2\n");
     if (fd < 0)
     {
@@ -28,9 +96,9 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
     }
     printf("\nCHECKPOINT#3\n");
 
-    switch (device)
+    switch (linkLayer.role)
     {
-    case TRANSMITTER:
+    case LlTx:
 
         FILE *file = fopen(filename, "rb");
         if (file == NULL)
@@ -49,7 +117,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
         printf("\n//////////\n//////////\n//////////\nPACKET START WILL WRITE\n//////////\n//////////\n//////////");
         sleep(3);
 
-        if (llwrite(fd, controlPacketStart, Psize) == -1)
+        if (llwrite(controlPacketStart, Psize) == -1)
         {
             printf("Exit: error in start packet\n");
             exit(-1);
@@ -77,7 +145,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
             unsigned char *packet = MakeDPacket(sequence, data, dataSize, &packetSize);
             // need to free packet;
 
-            if (llwrite(fd, packet, packetSize) == -1)
+            if (llwrite(packet, packetSize) == -1)
             {
                 printf("Exit: error in data packets\n");
                 exit(-1);
@@ -93,7 +161,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
         unsigned char *controlPacketEnd = MakeCPacket(3, filename, fileSize, &Psize2);
         printf("\n//////////\n//////////\n//////////\nPACKET END WILL WRITE\n//////////\n//////////\n//////////");
         sleep(5);
-        if (llwrite(fd, controlPacketEnd, Psize2) == -1)
+        if (llwrite(controlPacketEnd, Psize2) == -1)
         {
             printf("Exit: error in exit packet\n");
             exit(-1);
@@ -103,11 +171,11 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
 
         break;
 
-    case RECEIVER:
+    case LlRx:
         printf("\n\nRECEIVER#1\n\n");
         unsigned char *packet_r = (unsigned char *)malloc(MAX_PAYLOAD_SIZE);
         int packet_rSize = 0;
-        while ((packet_rSize = llread(fd, packet_r)) < 0)
+        while ((packet_rSize = llread(packet_r)) < 0)
             ;
         printf("\nAAAAAAAAAAAAAA\nAAAAAAAAAAA\nAAAAAAAAAAAAAA\n->CONTROL PACKET: %d\n", packet_r[0]);
         unsigned long int newFileSize = 0;
@@ -139,7 +207,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
         {
 
             // stuck
-            while ((packet_rSize = llread(fd, packet_r)) < 0)
+            while ((packet_rSize = llread(packet_r)) < 0)
             {
             }
             //printf("\nREAD PACKET\n");
