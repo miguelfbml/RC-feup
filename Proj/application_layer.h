@@ -12,8 +12,9 @@
 #define MAX_PAYLOAD_SIZE 40
 
 
-
+//cria um pacote de controlo
 unsigned char *MakeCPacket(unsigned char control, unsigned char *filename, long int length, unsigned int *size);
+//cria um pacote de dados
 unsigned char *MakeDPacket(unsigned char control, unsigned char *data, int length, unsigned int *size);
 
 #endif

@@ -69,11 +69,15 @@ enum Status
 
 
 
-// Function prototypes
+// cria ligação com a serial port
 int setup(const char *serialPortName);
+// estabelece ligação com entre o emissor e recetor
 int llopen(const char *porta, enum Status status);
+// termina a ligação
 int llclose(int fd);
+// envia tramas
 int llwrite(int fd, unsigned char *buffer, int length);
+// lê as tramas
 int llread(int fd, unsigned char *buffer);
 
 #endif // LINK_LAYER_H
