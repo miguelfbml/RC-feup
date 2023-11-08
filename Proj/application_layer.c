@@ -1,6 +1,6 @@
 
 #include "application_layer.h"
-
+#include <time.h>
 
 unsigned char *MakeCPacket(unsigned char control, unsigned char *filename, long int length, unsigned int *size)
 {
@@ -100,6 +100,10 @@ int main(int argc, unsigned char *argv[])
     }
     printf("\nCHECKPOINT#3\n");
 
+    double cpu_time_used;
+    clock_t start, end;
+
+
     switch (device)
     {
     case TRANSMITTER:
@@ -119,14 +123,14 @@ int main(int argc, unsigned char *argv[])
         printf("\nFILE_SIZE: %ld \n", fileSize);
         unsigned char *controlPacketStart = MakeCPacket(2, filename, fileSize, &Psize);
         printf("\n//////////\n//////////\n//////////\nPACKET START WILL WRITE\n//////////\n//////////\n//////////");
-        sleep(3);
+
 
         if (llwrite(fd, controlPacketStart, Psize) == -1)
         {
             printf("Exit: error in start packet\n");
             exit(-1);
         }
-        sleep(3);
+
         printf("\n PACKET_CONTROL FREE \n");
         free(controlPacketStart);
 
@@ -164,18 +168,19 @@ int main(int argc, unsigned char *argv[])
         unsigned int Psize2;
         unsigned char *controlPacketEnd = MakeCPacket(3, filename, fileSize, &Psize2);
         printf("\n//////////\n//////////\n//////////\nPACKET END WILL WRITE\n//////////\n//////////\n//////////");
-        sleep(5);
+
         if (llwrite(fd, controlPacketEnd, Psize2) == -1)
         {
             printf("Exit: error in exit packet\n");
             exit(-1);
         }
-        sleep(5);
+
         llclose(fd);
 
         break;
 
     case RECEIVER:
+        start = clock();
         printf("\n\nRECEIVER#1\n\n");
         unsigned char *packet_r = (unsigned char *)malloc(MAX_PAYLOAD_SIZE);
         int packet_rSize = 0;
@@ -240,6 +245,8 @@ int main(int argc, unsigned char *argv[])
         }
 
         fclose(newFile);
+        end = clock;
+        cpu_time_used = ((double) (end - start)) / CLOCKS_PER_SEC;
         break;
 
     default:

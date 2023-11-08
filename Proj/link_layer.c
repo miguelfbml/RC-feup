@@ -16,7 +16,7 @@
 
 #include "link_layer.h"
 
-#define BAUDRATE B38400
+
 #define _POSIX_SOURCE 1 // POSIX compliant source
 
 #define FALSE 0
@@ -346,7 +346,7 @@ int llclose(int fd)
 
     alarmCount = 0;
 
-    sleep(1);
+    //sleep(1);
     while (alarmCount < numretransmitions && state_mach_tx != STOP)
     {
 
@@ -438,7 +438,7 @@ int llclose(int fd)
     if (state_mach_tx != STOP)
         return -1;
     printf("\n SENDING UA\n");
-    sleep(1);
+    //sleep(1);
     sendcontrol(A_TRANSMITTER, UA);
 
     if (tcsetattr(fd, TCSANOW, &oldtio) == -1)
@@ -861,7 +861,7 @@ int llread(int fd, unsigned char *buffer)
         }
 
         printf("\n\n////////////CLOSING/////////////// \n\n");
-        sleep(2);
+
         close(fd);
         return 0;
     }
