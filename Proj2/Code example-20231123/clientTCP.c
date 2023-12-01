@@ -11,8 +11,10 @@
 
 #include <string.h>
 
-#define SERVER_PORT 6000
-#define SERVER_ADDR "192.168.28.96"
+//#define SERVER_PORT 6000
+#define SERVER_PORT 21
+//#define SERVER_ADDR "192.168.28.96"
+#define SERVER_ADDR "193.137.29.15"
 
 int main(int argc, char **argv) {
 
