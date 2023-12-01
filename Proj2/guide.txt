@@ -1,0 +1,4 @@
+
+./download ftp://anonymous:anonymous@ftp.up.pt/pub/kodi/timestamp.txt
+
+./download ftp://rcom:rcom@netlab1.fe.up.pt/pipe.txt
